@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>数据监测 — 物联网设备管理平台</title>
+  <link rel="stylesheet" href="/static/css/common.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body data-page="monitor">
+  <header class="topbar">
+    <span class="brand">物联网设备管理平台</span>
+    <nav>
+      <a href="/pages/index.html" data-nav="index">概览</a>
+      <a href="/pages/devices.html" data-nav="devices">设备</a>
+      <a href="/pages/monitor.html" data-nav="monitor">监测</a>
+      <a href="/pages/control.html" data-nav="control">控制</a>
+      <a href="/pages/ai_report.html" data-nav="ai">AI报告</a>
+      <a href="/pages/ble_setup.html" data-nav="ble">蓝牙配网</a>
+      <a href="/pages/profile.html" data-nav="profile">个人中心</a>
+    </nav>
+  </header>
+  <main class="container">
+    <h1>数据监测</h1>
+    <p class="muted">选择设备后可查看最新一条上报与温湿度光照曲线（Chart.js）。时间范围可选，留空则查全部（分页内）。</p>
+
+    <section class="card wide">
+      <div class="form-grid">
+        <label>设备<select id="sel-dev"><option value="">加载中…</option></select></label>
+        <label>开始时间<input type="datetime-local" id="t-start" /></label>
+        <label>结束时间<input type="datetime-local" id="t-end" /></label>
+      </div>
+      <div class="btn-row">
+        <button type="button" class="btn inline" id="btn-load">刷新数据</button>
+        <button type="button" class="btn inline btn-secondary" id="btn-auto">每 30 秒自动刷新</button>
+      </div>
+      <p id="tip" class="tip"></p>
+    </section>
+
+    <section class="card wide" style="margin-top:20px;">
+      <h2>最新数据</h2>
+      <pre id="latest" class="muted" style="margin:0;">—</pre>
+    </section>
+
+    <section class="card wide" style="margin-top:20px;">
+      <h2>趋势图</h2>
+      <div class="chart-wrap"><canvas id="chart"></canvas></div>
+    </section>
+
+    <section class="card wide" style="margin-top:20px;">
+      <h2>历史明细（当前页）</h2>
+      <table class="data-table" id="tbl">
+        <thead>
+          <tr><th>时间</th><th>温度℃</th><th>湿度%</th><th>光照 lux</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/nav.js"></script>
+  <script>
+    var chart;
+    var autoTimer;
+
+    function toApiDatetime(localStr) {
+      if (!localStr) return null;
+      return localStr.replace("T", " ") + ":00";
+    }
+
+    async function loadDevices() {
+      var sel = document.getElementById("sel-dev");
+      try {
+        var list = await apiFetch("/api/devices");
+        sel.innerHTML = "";
+        if (!list.length) {
+          sel.innerHTML = "<option value=''>暂无设备</option>";
+          return;
+        }
+        list.forEach(function (d) {
+          var o = document.createElement("option");
+          o.value = d.id;
+          o.textContent = (d.name || d.device_uid) + " (#" + d.id + ")";
+          sel.appendChild(o);
+        });
+      } catch (e) {
+        if (e.code === 401) window.location.href = "/pages/login.html";
+        else sel.innerHTML = "<option value=''>加载失败</option>";
+      }
+    }
+
+    function buildChart(rowsAsc) {
+      var ctx = document.getElementById("chart");
+      if (chart) chart.destroy();
+      var labels = rowsAsc.map(function (r) { return r.recorded_at; });
+      chart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: labels,
+          datasets: [
+            { label: "温度℃", data: rowsAsc.map(function (r) { return r.temperature; }), borderColor: "#2563eb", tension: 0.2 },
+            { label: "湿度%", data: rowsAsc.map(function (r) { return r.humidity; }), borderColor: "#059669", tension: 0.2 },
+            { label: "光照", data: rowsAsc.map(function (r) { return r.illuminance; }), borderColor: "#d97706", tension: 0.2, yAxisID: "y1" },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          scales: {
+            y: { position: "left", title: { display: true, text: "温湿度" } },
+            y1: { position: "right", grid: { drawOnChartArea: false }, title: { display: true, text: "光照" } },
+          },
+        },
+      });
+    }
+
+    async function loadData() {
+      var tip = document.getElementById("tip");
+      tip.textContent = "";
+      var id = document.getElementById("sel-dev").value;
+      if (!id) {
+        tip.textContent = "请选择设备";
+        return;
+      }
+      try {
+        var latest = await apiFetch("/api/devices/" + id + "/latest");
+        document.getElementById("latest").textContent = JSON.stringify(latest.payload, null, 2) || "无数据";
+
+        var start = toApiDatetime(document.getElementById("t-start").value);
+        var end = toApiDatetime(document.getElementById("t-end").value);
+        var q = "?page=1&page_size=200";
+        if (start) q += "&start=" + encodeURIComponent(start);
+        if (end) q += "&end=" + encodeURIComponent(end);
+        var hist = await apiFetch("/api/devices/" + id + "/history" + q);
+        var rows = (hist.list || []).slice().reverse();
+        var tbody = document.querySelector("#tbl tbody");
+        tbody.innerHTML = "";
+        if (!hist.list || !hist.list.length) {
+          tbody.innerHTML = "<tr><td colspan='4' class='muted'>暂无数据</td></tr>";
+          if (chart) chart.destroy();
+          return;
+        }
+        hist.list.forEach(function (r) {
+          var tr = document.createElement("tr");
+          tr.innerHTML =
+            "<td>" + r.recorded_at + "</td>" +
+            "<td>" + (r.temperature != null ? r.temperature : "—") + "</td>" +
+            "<td>" + (r.humidity != null ? r.humidity : "—") + "</td>" +
+            "<td>" + (r.illuminance != null ? r.illuminance : "—") + "</td>";
+          tbody.appendChild(tr);
+        });
+        buildChart(rows);
+      } catch (e) {
+        tip.textContent = e.message;
+      }
+    }
+
+    document.getElementById("btn-load").addEventListener("click", loadData);
+    document.getElementById("btn-auto").addEventListener("click", function () {
+      if (autoTimer) {
+        clearInterval(autoTimer);
+        autoTimer = null;
+        this.textContent = "每 30 秒自动刷新";
+        return;
+      }
+      loadData();
+      autoTimer = setInterval(loadData, 30000);
+      this.textContent = "停止自动刷新";
+    });
+
+    loadDevices().then(function () {
+      var sel = document.getElementById("sel-dev");
+      if (sel.options.length && sel.options[0].value) loadData();
+    });
+  </script>
+</body>
+</html>

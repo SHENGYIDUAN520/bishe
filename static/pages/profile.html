@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>个人中心 — 物联网设备管理平台</title>
+  <link rel="stylesheet" href="/static/css/common.css" />
+</head>
+<body data-page="profile">
+  <header class="topbar">
+    <span class="brand">物联网设备管理平台</span>
+    <nav>
+      <a href="/pages/index.html" data-nav="index">概览</a>
+      <a href="/pages/devices.html" data-nav="devices">设备</a>
+      <a href="/pages/monitor.html" data-nav="monitor">监测</a>
+      <a href="/pages/control.html" data-nav="control">控制</a>
+      <a href="/pages/ai_report.html" data-nav="ai">AI报告</a>
+      <a href="/pages/ble_setup.html" data-nav="ble">蓝牙配网</a>
+      <a href="/pages/profile.html" data-nav="profile">个人中心</a>
+    </nav>
+  </header>
+  <main class="container">
+    <h1>个人中心</h1>
+    <p class="muted">会话信息来自服务端 Session，退出后需重新登录。</p>
+
+    <section class="card wide">
+      <h2>账号信息</h2>
+      <pre id="profile" class="muted" style="margin:0;">加载中…</pre>
+      <div class="btn-row" style="margin-top:16px;">
+        <button type="button" class="btn inline btn-danger" id="btn-out">退出登录</button>
+        <a class="btn inline btn-secondary" href="/pages/index.html" style="display:inline-block;text-align:center;line-height:normal;text-decoration:none;">返回首页</a>
+      </div>
+    </section>
+  </main>
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/nav.js"></script>
+  <script>
+    (async function () {
+      try {
+        document.getElementById("profile").textContent = JSON.stringify(
+          await apiFetch("/api/user/profile"),
+          null,
+          2
+        );
+      } catch (e) {
+        document.getElementById("profile").textContent = e.message || "未登录";
+        if (e.code === 401) window.location.href = "/pages/login.html";
+      }
+    })();
+    document.getElementById("btn-out").addEventListener("click", async function () {
+      try {
+        await apiFetch("/api/auth/logout", { method: "POST", body: "{}" });
+      } catch (_) {}
+      window.location.href = "/pages/login.html";
+    });
+  </script>
+</body>
+</html>

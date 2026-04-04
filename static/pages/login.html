@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>登录 — 物联网设备管理平台</title>
+  <link rel="stylesheet" href="/static/css/common.css" />
+</head>
+<body class="page-center">
+  <main class="card">
+    <h1>物联网设备管理平台</h1>
+    <p class="muted">毕设演示：默认账号 <code>admin</code> / <code>123456</code>（导入 sql 后）</p>
+    <form id="form-login">
+      <label>用户名<input name="username" required autocomplete="username" /></label>
+      <label>密码<input name="password" type="password" required autocomplete="current-password" /></label>
+      <button type="submit">登录</button>
+    </form>
+    <p id="tip" class="tip"></p>
+    <p><a href="/pages/register.html">没有账号？注册</a></p>
+  </main>
+  <script src="/static/js/api.js"></script>
+  <script>
+    document.getElementById("form-login").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const tip = document.getElementById("tip");
+      tip.textContent = "";
+      const fd = new FormData(e.target);
+      const body = { username: fd.get("username"), password: fd.get("password") };
+      try {
+        await apiFetch("/api/auth/login", { method: "POST", body: JSON.stringify(body) });
+        tip.textContent = "登录成功，正在跳转…";
+        window.location.href = "/pages/index.html";
+      } catch (err) {
+        tip.textContent = err.message || "登录失败";
+      }
+    });
+  </script>
+</body>
+</html>

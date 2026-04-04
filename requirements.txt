@@ -1,0 +1,8 @@
+# 物联网设备管理平台 — Python 依赖（固定版本，便于答辩复现）
+Flask==3.0.3
+flask-cors==4.0.1
+PyMySQL==1.1.1
+cryptography==44.0.2
+python-dotenv==1.0.1
+Werkzeug==3.0.3
+requests==2.32.3

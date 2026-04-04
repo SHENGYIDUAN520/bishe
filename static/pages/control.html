@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>远程控制 — 物联网设备管理平台</title>
+  <link rel="stylesheet" href="/static/css/common.css" />
+</head>
+<body data-page="control">
+  <header class="topbar">
+    <span class="brand">物联网设备管理平台</span>
+    <nav>
+      <a href="/pages/index.html" data-nav="index">概览</a>
+      <a href="/pages/devices.html" data-nav="devices">设备</a>
+      <a href="/pages/monitor.html" data-nav="monitor">监测</a>
+      <a href="/pages/control.html" data-nav="control">控制</a>
+      <a href="/pages/ai_report.html" data-nav="ai">AI报告</a>
+      <a href="/pages/ble_setup.html" data-nav="ble">蓝牙配网</a>
+      <a href="/pages/profile.html" data-nav="profile">个人中心</a>
+    </nav>
+  </header>
+  <main class="container">
+    <h1>远程控制</h1>
+    <p class="muted">指令写入 <code>command_log</code>，状态为 <code>pending</code>，待 ESP32 调用网关接口拉取后执行。无硬件时仍可演示「下发记录」流程。</p>
+
+    <section class="card wide">
+      <h2>下发指令</h2>
+      <div class="form-grid">
+        <label>目标设备<select id="sel-dev"><option value="">加载中…</option></select></label>
+        <label>指令类型
+          <select id="sel-cmd">
+            <option value="reboot">reboot — 设备复位</option>
+            <option value="set_interval">set_interval — 采集间隔</option>
+            <option value="sensor_on">sensor_on — 开启传感</option>
+            <option value="sensor_off">sensor_off — 关闭传感</option>
+          </select>
+        </label>
+      </div>
+      <label>参数 JSON（可选，如采集间隔 <code>{"seconds":60}</code>）</label>
+      <textarea id="payload" placeholder='{"seconds": 60}'></textarea>
+      <div class="btn-row">
+        <button type="button" class="btn inline" id="btn-send">下发</button>
+      </div>
+      <p id="tip" class="tip"></p>
+    </section>
+
+    <section class="card wide" style="margin-top:20px;">
+      <h2>指令记录</h2>
+      <div class="btn-row">
+        <button type="button" class="btn inline btn-secondary" id="btn-refresh">刷新列表</button>
+      </div>
+      <table class="data-table" id="tbl">
+        <thead>
+          <tr><th>时间</th><th>类型</th><th>参数</th><th>状态</th><th>回执</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/nav.js"></script>
+  <script>
+    async function loadDevices() {
+      var sel = document.getElementById("sel-dev");
+      try {
+        var list = await apiFetch("/api/devices");
+        sel.innerHTML = "";
+        if (!list.length) {
+          sel.innerHTML = "<option value=''>暂无设备</option>";
+          return;
+        }
+        list.forEach(function (d) {
+          var o = document.createElement("option");
+          o.value = d.id;
+          o.textContent = (d.name || d.device_uid) + " (#" + d.id + ")";
+          sel.appendChild(o);
+        });
+      } catch (e) {
+        if (e.code === 401) window.location.href = "/pages/login.html";
+        else sel.innerHTML = "<option value=''>加载失败</option>";
+      }
+    }
+
+    async function refreshList() {
+      var id = document.getElementById("sel-dev").value;
+      var tbody = document.querySelector("#tbl tbody");
+      if (!id) {
+        tbody.innerHTML = "<tr><td colspan='5' class='muted'>请选择设备</td></tr>";
+        return;
+      }
+      try {
+        var res = await apiFetch("/api/devices/" + id + "/commands");
+        tbody.innerHTML = "";
+        if (!res.list || !res.list.length) {
+          tbody.innerHTML = "<tr><td colspan='5' class='muted'>暂无记录</td></tr>";
+          return;
+        }
+        res.list.forEach(function (c) {
+          var tr = document.createElement("tr");
+          tr.innerHTML =
+            "<td>" + c.created_at + "</td>" +
+            "<td><code>" + c.command_type + "</code></td>" +
+            "<td><code style='font-size:0.8rem'>" +
+            (c.payload ? JSON.stringify(c.payload) : "—") + "</code></td>" +
+            "<td>" + c.status + "</td>" +
+            "<td>" + (c.result_msg || "—") + "</td>";
+          tbody.appendChild(tr);
+        });
+      } catch (e) {
+        tbody.innerHTML = "<tr><td colspan='5' class='err'>" + e.message + "</td></tr>";
+      }
+    }
+
+    document.getElementById("btn-send").addEventListener("click", async function () {
+      var tip = document.getElementById("tip");
+      tip.textContent = "";
+      var id = document.getElementById("sel-dev").value;
+      var ctype = document.getElementById("sel-cmd").value;
+      var raw = document.getElementById("payload").value.trim();
+      var payload = undefined;
+      if (raw) {
+        try {
+          payload = JSON.parse(raw);
+        } catch (e) {
+          tip.textContent = "参数须为合法 JSON";
+          return;
+        }
+      }
+      if (!id) {
+        tip.textContent = "请选择设备";
+        return;
+      }
+      try {
+        await apiFetch("/api/devices/" + id + "/commands", {
+          method: "POST",
+          body: JSON.stringify({ command_type: ctype, payload: payload }),
+        });
+        tip.textContent = "已记录";
+        tip.className = "ok";
+        refreshList();
+      } catch (e) {
+        tip.textContent = e.message;
+        tip.className = "err";
+      }
+    });
+
+    document.getElementById("btn-refresh").addEventListener("click", refreshList);
+    document.getElementById("sel-dev").addEventListener("change", refreshList);
+
+    loadDevices().then(refreshList);
+  </script>
+</body>
+</html>

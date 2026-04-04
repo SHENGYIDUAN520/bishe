@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>注册 — 物联网设备管理平台</title>
+  <link rel="stylesheet" href="/static/css/common.css" />
+</head>
+<body class="page-center">
+  <main class="card">
+    <h1>用户注册</h1>
+    <form id="form-reg">
+      <label>用户名<input name="username" required minlength="3" /></label>
+      <label>密码<input name="password" type="password" required minlength="6" /></label>
+      <label>昵称<input name="nickname" /></label>
+      <button type="submit">注册</button>
+    </form>
+    <p id="tip" class="tip"></p>
+    <p><a href="/pages/login.html">已有账号？登录</a></p>
+  </main>
+  <script src="/static/js/api.js"></script>
+  <script>
+    document.getElementById("form-reg").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const tip = document.getElementById("tip");
+      tip.textContent = "";
+      const fd = new FormData(e.target);
+      const body = {
+        username: fd.get("username"),
+        password: fd.get("password"),
+        nickname: fd.get("nickname") || undefined,
+      };
+      try {
+        await apiFetch("/api/auth/register", { method: "POST", body: JSON.stringify(body) });
+        tip.textContent = "注册成功，请登录";
+        setTimeout(() => (window.location.href = "/pages/login.html"), 800);
+      } catch (err) {
+        tip.textContent = err.message || "注册失败";
+      }
+    });
+  </script>
+</body>
+</html>

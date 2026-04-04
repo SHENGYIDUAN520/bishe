@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI 分析报告 — 物联网设备管理平台</title>
+  <link rel="stylesheet" href="/static/css/common.css" />
+</head>
+<body data-page="ai">
+  <header class="topbar">
+    <span class="brand">物联网设备管理平台</span>
+    <nav>
+      <a href="/pages/index.html" data-nav="index">概览</a>
+      <a href="/pages/devices.html" data-nav="devices">设备</a>
+      <a href="/pages/monitor.html" data-nav="monitor">监测</a>
+      <a href="/pages/control.html" data-nav="control">控制</a>
+      <a href="/pages/ai_report.html" data-nav="ai">AI报告</a>
+      <a href="/pages/ble_setup.html" data-nav="ble">蓝牙配网</a>
+      <a href="/pages/profile.html" data-nav="profile">个人中心</a>
+    </nav>
+  </header>
+  <main class="container">
+    <h1>AI 数据分析报告</h1>
+    <p class="muted">服务端已支持<strong>火山方舟</strong>（配置 <code>AI_API_KEY</code> + <code>AI_MODEL</code> 后点击生成即调大模型）；未配置时仍为本地统计模板。</p>
+
+    <section class="card wide">
+      <h2>生成新报告</h2>
+      <div class="form-grid">
+        <label>针对设备（可选，默认取第一台）
+          <select id="sel-dev"><option value="">默认第一台</option></select>
+        </label>
+      </div>
+      <div class="btn-row">
+        <button type="button" class="btn inline" id="btn-run">生成分析</button>
+        <button type="button" class="btn inline btn-secondary" id="btn-refresh">刷新列表</button>
+      </div>
+      <p id="tip" class="tip"></p>
+    </section>
+
+    <section class="card wide" style="margin-top:20px;">
+      <h2>报告列表</h2>
+      <table class="data-table" id="tbl">
+        <thead>
+          <tr><th>ID</th><th>标题</th><th>摘要</th><th>时间</th><th>操作</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="card wide" style="margin-top:20px;">
+      <h2>报告详情</h2>
+      <p class="muted" id="detail-meta">点击上表「查看」</p>
+      <div id="detail-body" class="report-detail muted">—</div>
+    </section>
+  </main>
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/nav.js"></script>
+  <script>
+    async function loadDevices() {
+      var sel = document.getElementById("sel-dev");
+      try {
+        var list = await apiFetch("/api/devices");
+        sel.innerHTML = "<option value=''>默认第一台</option>";
+        list.forEach(function (d) {
+          var o = document.createElement("option");
+          o.value = d.id;
+          o.textContent = (d.name || d.device_uid) + " (#" + d.id + ")";
+          sel.appendChild(o);
+        });
+      } catch (e) {
+        if (e.code === 401) window.location.href = "/pages/login.html";
+      }
+    }
+
+    async function refreshList() {
+      var tbody = document.querySelector("#tbl tbody");
+      try {
+        var list = await apiFetch("/api/ai/reports");
+        tbody.innerHTML = "";
+        if (!list.length) {
+          tbody.innerHTML = "<tr><td colspan='5' class='muted'>暂无报告</td></tr>";
+          return;
+        }
+        list.forEach(function (r) {
+          var tr = document.createElement("tr");
+          var sum = (r.summary || "").replace(/</g, "&lt;");
+          if (sum.length > 60) sum = sum.slice(0, 60) + "…";
+          tr.innerHTML =
+            "<td>" + r.id + "</td>" +
+            "<td>" + (r.title || "—") + "</td>" +
+            "<td>" + sum + "</td>" +
+            "<td>" + (r.created_at || "") + "</td>" +
+            "<td><button type='button' class='btn inline btn-secondary view' data-id='" + r.id + "'>查看</button></td>";
+          tbody.appendChild(tr);
+        });
+        tbody.querySelectorAll(".view").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            loadDetail(btn.getAttribute("data-id"));
+          });
+        });
+      } catch (e) {
+        tbody.innerHTML = "<tr><td colspan='5' class='err'>" + e.message + "</td></tr>";
+      }
+    }
+
+    async function loadDetail(id) {
+      try {
+        var r = await apiFetch("/api/ai/reports/" + id);
+        document.getElementById("detail-meta").textContent =
+          "ID " + r.id + " | 设备 " + (r.device_id || "—") + " | " + (r.report_type || "");
+        document.getElementById("detail-body").textContent = (r.title || "") + "\n\n" + (r.summary || "") + "\n\n" + (r.content || "");
+        document.getElementById("detail-body").className = "report-detail";
+      } catch (e) {
+        document.getElementById("detail-body").textContent = e.message;
+      }
+    }
+
+    document.getElementById("btn-run").addEventListener("click", async function () {
+      var tip = document.getElementById("tip");
+      tip.textContent = "";
+      var sid = document.getElementById("sel-dev").value;
+      var body = {};
+      if (sid) body.device_id = parseInt(sid, 10);
+      try {
+        var res = await apiFetch("/api/ai/analyze", { method: "POST", body: JSON.stringify(body) });
+        tip.textContent = "已生成报告 #" + res.report_id;
+        tip.className = "ok";
+        refreshList();
+        loadDetail(res.report_id);
+      } catch (e) {
+        tip.textContent = e.message;
+        tip.className = "err";
+      }
+    });
+
+    document.getElementById("btn-refresh").addEventListener("click", refreshList);
+
+    loadDevices();
+    refreshList();
+  </script>
+</body>
+</html>

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>蓝牙配网 — 物联网设备管理平台</title>
+  <link rel="stylesheet" href="/static/css/common.css" />
+</head>
+<body data-page="ble">
+  <header class="topbar">
+    <span class="brand">物联网设备管理平台</span>
+    <nav>
+      <a href="/pages/index.html" data-nav="index">概览</a>
+      <a href="/pages/devices.html" data-nav="devices">设备</a>
+      <a href="/pages/monitor.html" data-nav="monitor">监测</a>
+      <a href="/pages/control.html" data-nav="control">控制</a>
+      <a href="/pages/ai_report.html" data-nav="ai">AI报告</a>
+      <a href="/pages/ble_setup.html" data-nav="ble">蓝牙配网</a>
+      <a href="/pages/profile.html" data-nav="profile">个人中心</a>
+    </nav>
+  </header>
+  <main class="container">
+    <h1>蓝牙配网（Web Bluetooth）</h1>
+    <p class="muted">实体 <strong>ESP32-WROOM-32</strong> 到货后，使用本页在 <strong>Chrome / Edge 桌面版</strong> 完成：扫描 → 连接 → 下发 WiFi 账号密码 → 观察开发板 LED 与串口日志。</p>
+
+    <section class="card wide">
+      <h2>流程说明</h2>
+      <ol class="steps">
+        <li>开发板上电，固件进入 BLE 广播状态（具体服务 UUID 以 <code>firmware/</code> 内代码为准，后续补充）。</li>
+        <li>本页点击「扫描并连接」，浏览器弹出设备选择框，选中你的 ESP32。</li>
+        <li>填写家庭/实验室 WiFi 的 SSID 与密码，写入特征值；设备断开 BLE 后自动连接 WiFi 并向平台注册。</li>
+        <li>回到「设备管理」绑定或核对设备是否出现在列表中。</li>
+      </ol>
+      <p class="tip">当前<strong>无硬件</strong>：下方按钮仅演示交互与异常提示，不会发起真实蓝牙连接。</p>
+    </section>
+
+    <section class="card wide" style="margin-top:20px;">
+      <h2>模拟操作区</h2>
+      <label>WiFi 名称（SSID）</label>
+      <input type="text" id="ssid" placeholder="例如 Lab_IoT" />
+      <label>WiFi 密码</label>
+      <input type="password" id="pwd" placeholder="配网密码" />
+      <div class="btn-row">
+        <button type="button" class="btn inline" id="btn-scan">扫描并连接（模拟）</button>
+        <button type="button" class="btn inline btn-secondary" id="btn-send">下发配置（模拟）</button>
+      </div>
+      <p id="log" class="tip" style="margin-top:12px;white-space:pre-wrap;"></p>
+    </section>
+
+    <section class="card wide" style="margin-top:20px;">
+      <h2>浏览器支持</h2>
+      <p class="muted">Web Bluetooth 在多数手机浏览器上受限，请优先使用 <strong>Windows 桌面 Chrome</strong>。若 <code>navigator.bluetooth</code> 不存在，页面会在真机联调时给出提示。</p>
+    </section>
+  </main>
+  <script src="/static/js/nav.js"></script>
+  <script>
+    function log(msg) {
+      document.getElementById("log").textContent = msg;
+    }
+    document.getElementById("btn-scan").addEventListener("click", function () {
+      if (!navigator.bluetooth) {
+        log("当前浏览器不支持 Web Bluetooth 或未在安全上下文（需 HTTPS 或 localhost）。\n无硬件阶段：此为预期提示。");
+        return;
+      }
+      log("已检测到 Web Bluetooth API。\n无实体设备时，下一步将因未发现设备而失败；ESP32 就绪后可在此处接真实 requestDevice 逻辑。");
+    });
+    document.getElementById("btn-send").addEventListener("click", function () {
+      var s = document.getElementById("ssid").value.trim();
+      if (!s) {
+        log("请先填写 SSID（模拟校验）。");
+        return;
+      }
+      log("【模拟】已封装配置：SSID=" + s + "\n真实固件应通过 BLE 特征值接收 JSON，再调用 WiFi.begin()。");
+    });
+  </script>
+</body>
+</html>

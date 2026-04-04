@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>数据概览 — 物联网设备管理平台</title>
+  <link rel="stylesheet" href="/static/css/common.css" />
+</head>
+<body data-page="index">
+  <header class="topbar">
+    <span class="brand">物联网设备管理平台</span>
+    <nav>
+      <a href="/pages/index.html" data-nav="index">概览</a>
+      <a href="/pages/devices.html" data-nav="devices">设备</a>
+      <a href="/pages/monitor.html" data-nav="monitor">监测</a>
+      <a href="/pages/control.html" data-nav="control">控制</a>
+      <a href="/pages/ai_report.html" data-nav="ai">AI报告</a>
+      <a href="/pages/ble_setup.html" data-nav="ble">蓝牙配网</a>
+      <a href="/pages/profile.html" data-nav="profile">个人中心</a>
+    </nav>
+  </header>
+  <main class="container">
+    <h1>数据概览</h1>
+    <p class="muted">展示当前账号下设备规模与今日入库数据量；设备未上线时仍可使用「演示数据」体验流程。</p>
+
+    <div class="stat-grid" id="stats">
+      <div class="stat-box"><span>我的设备</span><strong id="s-dev">—</strong></div>
+      <div class="stat-box"><span>今日数据条数</span><strong id="s-today">—</strong></div>
+    </div>
+
+    <section class="card wide">
+      <h2>设备状态一览</h2>
+      <p class="muted" id="dev-hint"></p>
+      <table class="data-table" id="tbl-dev">
+        <thead>
+          <tr><th>名称</th><th>设备标识</th><th>最后心跳</th><th>固件</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="card wide" style="margin-top:20px;">
+      <h2>当前登录用户</h2>
+      <pre id="profile" class="muted" style="margin:0;font-size:0.9rem;">加载中…</pre>
+    </section>
+  </main>
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/nav.js"></script>
+  <script>
+    async function load() {
+      const tbody = document.querySelector("#tbl-dev tbody");
+      try {
+        const dash = await apiFetch("/api/dashboard/overview");
+        document.getElementById("s-dev").textContent = dash.device_count;
+        document.getElementById("s-today").textContent = dash.today_data_count;
+        tbody.innerHTML = "";
+        if (!dash.devices || !dash.devices.length) {
+          document.getElementById("dev-hint").textContent =
+            "暂无绑定设备。请到「设备管理」绑定演示设备 UNBOUND-DEMO-01 / bind-me-888，或生成模拟设备。";
+          tbody.innerHTML = "<tr><td colspan='4' class='muted'>无数据</td></tr>";
+        } else {
+          document.getElementById("dev-hint").textContent = "";
+          dash.devices.forEach(function (d) {
+            const tr = document.createElement("tr");
+            tr.innerHTML =
+              "<td>" + (d.name || "—") + "</td>" +
+              "<td><code>" + (d.device_uid || "") + "</code></td>" +
+              "<td>" + (d.last_heartbeat || "从未上报") + "</td>" +
+              "<td>" + (d.firmware_ver || "—") + "</td>";
+            tbody.appendChild(tr);
+          });
+        }
+        const u = await apiFetch("/api/user/profile");
+        document.getElementById("profile").textContent = JSON.stringify(u, null, 2);
+      } catch (e) {
+        if (e.code === 401) {
+          window.location.href = "/pages/login.html";
+          return;
+        }
+        document.getElementById("profile").textContent = e.message || "加载失败";
+      }
+    }
+    load();
+  </script>
+</body>
+</html>

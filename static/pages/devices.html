@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>设备管理 — 物联网设备管理平台</title>
+  <link rel="stylesheet" href="/static/css/common.css" />
+</head>
+<body data-page="devices">
+  <header class="topbar">
+    <span class="brand">物联网设备管理平台</span>
+    <nav>
+      <a href="/pages/index.html" data-nav="index">概览</a>
+      <a href="/pages/devices.html" data-nav="devices">设备</a>
+      <a href="/pages/monitor.html" data-nav="monitor">监测</a>
+      <a href="/pages/control.html" data-nav="control">控制</a>
+      <a href="/pages/ai_report.html" data-nav="ai">AI报告</a>
+      <a href="/pages/ble_setup.html" data-nav="ble">蓝牙配网</a>
+      <a href="/pages/profile.html" data-nav="profile">个人中心</a>
+    </nav>
+  </header>
+  <main class="container">
+    <h1>设备管理</h1>
+    <p class="muted">绑定需设备已在库中存在（演示库已预置一台「待绑定」设备）。无硬件时可点击「生成模拟设备」自动创建并绑定。</p>
+
+    <div class="btn-row">
+      <button type="button" class="btn inline" id="btn-demo">生成模拟设备</button>
+    </div>
+    <p id="demo-out" class="tip"></p>
+
+    <section class="card wide" style="margin-top:20px;">
+      <h2>我的设备</h2>
+      <p id="list-tip" class="tip"></p>
+      <table class="data-table" id="tbl">
+        <thead>
+          <tr>
+            <th>ID</th><th>名称</th><th>设备标识</th><th>最后心跳</th><th>操作</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="card wide" style="margin-top:20px;">
+      <h2>绑定新设备</h2>
+      <p class="muted">演示：设备标识 <code>UNBOUND-DEMO-01</code>，密钥 <code>bind-me-888</code></p>
+      <form id="form-bind" class="form-grid">
+        <label>设备标识<input name="device_uid" required placeholder="如 UNBOUND-DEMO-01" /></label>
+        <label>设备密钥<input name="device_secret" type="password" required /></label>
+        <label style="grid-column:1/-1;">备注名称（可选）<input name="name" placeholder="起个好记的名字" /></label>
+      </form>
+      <div class="btn-row">
+        <button type="submit" form="form-bind" class="btn inline">绑定</button>
+      </div>
+      <p id="bind-tip" class="tip"></p>
+    </section>
+  </main>
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/nav.js"></script>
+  <script>
+    async function refresh() {
+      const tbody = document.querySelector("#tbl tbody");
+      document.getElementById("list-tip").textContent = "";
+      try {
+        const list = await apiFetch("/api/devices");
+        tbody.innerHTML = "";
+        if (!list.length) {
+          tbody.innerHTML = "<tr><td colspan='5' class='muted'>暂无设备</td></tr>";
+          return;
+        }
+        list.forEach(function (d) {
+          const tr = document.createElement("tr");
+          tr.innerHTML =
+            "<td>" + d.id + "</td>" +
+            "<td><input data-id='" + d.id + "' class='nm' type='text' value='" +
+            (d.name || "").replace(/'/g, "&#39;") + "' style='max-width:140px;padding:6px'/></td>" +
+            "<td><code>" + d.device_uid + "</code></td>" +
+            "<td>" + (d.last_heartbeat || "—") + "</td>" +
+            "<td>" +
+            "<button type='button' class='btn inline btn-secondary save-nm' data-id='" + d.id + "'>保存名称</button> " +
+            "<button type='button' class='btn inline btn-danger del-dev' data-id='" + d.id + "'>删除</button>" +
+            "</td>";
+          tbody.appendChild(tr);
+        });
+        tbody.querySelectorAll(".save-nm").forEach(function (btn) {
+          btn.addEventListener("click", async function () {
+            var id = btn.getAttribute("data-id");
+            var inp = tbody.querySelector("input.nm[data-id='" + id + "']");
+            try {
+              await apiFetch("/api/devices/" + id, {
+                method: "PUT",
+                body: JSON.stringify({ name: inp.value }),
+              });
+              document.getElementById("list-tip").textContent = "已保存";
+              document.getElementById("list-tip").className = "ok";
+            } catch (e) {
+              document.getElementById("list-tip").textContent = e.message;
+              document.getElementById("list-tip").className = "err";
+            }
+          });
+        });
+        tbody.querySelectorAll(".del-dev").forEach(function (btn) {
+          btn.addEventListener("click", async function () {
+            if (!confirm("确定删除该设备？其历史数据与指令记录将一并删除。")) return;
+            var id = btn.getAttribute("data-id");
+            try {
+              await apiFetch("/api/devices/" + id, { method: "DELETE" });
+              refresh();
+            } catch (e) {
+              alert(e.message);
+            }
+          });
+        });
+      } catch (e) {
+        if (e.code === 401) window.location.href = "/pages/login.html";
+        else document.getElementById("list-tip").textContent = e.message;
+      }
+    }
+
+    document.getElementById("form-bind").addEventListener("submit", async function (e) {
+      e.preventDefault();
+      var fd = new FormData(e.target);
+      var tip = document.getElementById("bind-tip");
+      tip.textContent = "";
+      try {
+        await apiFetch("/api/devices/bind", {
+          method: "POST",
+          body: JSON.stringify({
+            device_uid: fd.get("device_uid"),
+            device_secret: fd.get("device_secret"),
+            name: fd.get("name") || undefined,
+          }),
+        });
+        tip.textContent = "绑定成功";
+        tip.className = "ok";
+        e.target.reset();
+        refresh();
+      } catch (err) {
+        tip.textContent = err.message;
+        tip.className = "err";
+      }
+    });
+
+    document.getElementById("btn-demo").addEventListener("click", async function () {
+      var out = document.getElementById("demo-out");
+      out.textContent = "创建中…";
+      try {
+        var data = await apiFetch("/api/devices/demo", { method: "POST", body: "{}" });
+        out.innerHTML =
+          "<span class='ok'>" + (data.hint || "") + "</span><br/>标识：<code>" +
+          data.device_uid + "</code> 密钥：<code>" + data.device_secret + "</code>";
+        refresh();
+      } catch (e) {
+        out.textContent = e.message;
+        out.className = "err";
+      }
+    });
+
+    refresh();
+  </script>
+</body>
+</html>
