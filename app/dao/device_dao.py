@@ -48,6 +48,24 @@ def find_by_uid(device_uid: str) -> Optional[Dict]:
         return cur.fetchone()
 
 
+def touch_heartbeat(device_id: int) -> None:
+    """更新设备最后心跳时间。"""
+    with get_cursor(commit=True) as cur:
+        cur.execute(
+            "UPDATE device SET last_heartbeat = NOW() WHERE id = %s",
+            (device_id,),
+        )
+
+
+def update_firmware(device_id: int, firmware_ver: str) -> None:
+    """更新设备固件版本。"""
+    with get_cursor(commit=True) as cur:
+        cur.execute(
+            "UPDATE device SET firmware_ver = %s WHERE id = %s",
+            (firmware_ver, device_id),
+        )
+
+
 def insert_device(
     device_uid: str,
     device_secret: str,
