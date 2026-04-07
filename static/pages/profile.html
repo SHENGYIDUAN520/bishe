@@ -25,8 +25,27 @@
 
     <section class="card wide">
       <h2>账号信息</h2>
-      <pre id="profile" class="muted" style="margin:0;">加载中…</pre>
+      <form id="form-profile" class="form-grid">
+        <label>用户名
+          <input id="f-username" type="text" disabled />
+        </label>
+        <label>昵称
+          <input id="f-nickname" type="text" disabled />
+        </label>
+        <label>邮箱
+          <input id="f-email" type="email" placeholder="用于温度告警邮件通知" />
+        </label>
+        <label>手机号
+          <input id="f-phone" type="text" placeholder="可选" />
+        </label>
+        <label>告警温度上限（℃）
+          <input id="f-temp-high" type="number" step="0.1" placeholder="如 30.0" />
+        </label>
+      </form>
+      <p id="tip" class="tip"></p>
       <div class="btn-row" style="margin-top:16px;">
+        <button type="button" class="btn inline" id="btn-save">保存设置</button>
+        <button type="button" class="btn inline btn-secondary" id="btn-email-test">测试邮件</button>
         <button type="button" class="btn inline btn-danger" id="btn-out">退出登录</button>
         <a class="btn inline btn-secondary" href="/pages/index.html" style="display:inline-block;text-align:center;line-height:normal;text-decoration:none;">返回首页</a>
       </div>
@@ -35,18 +54,58 @@
   <script src="/static/js/api.js"></script>
   <script src="/static/js/nav.js"></script>
   <script>
-    (async function () {
+    async function loadProfile() {
       try {
-        document.getElementById("profile").textContent = JSON.stringify(
-          await apiFetch("/api/user/profile"),
-          null,
-          2
-        );
+        var p = await apiFetch("/api/user/profile");
+        document.getElementById("f-username").value = p.username || "";
+        document.getElementById("f-nickname").value = p.nickname || "";
+        document.getElementById("f-email").value = p.email || "";
+        document.getElementById("f-phone").value = p.phone || "";
+        document.getElementById("f-temp-high").value =
+          p.temp_warn_high != null ? p.temp_warn_high : "";
       } catch (e) {
-        document.getElementById("profile").textContent = e.message || "未登录";
         if (e.code === 401) window.location.href = "/pages/login.html";
+        document.getElementById("tip").textContent = e.message || "加载失败";
+        document.getElementById("tip").className = "err";
       }
-    })();
+    }
+
+    document.getElementById("btn-save").addEventListener("click", async function () {
+      var tip = document.getElementById("tip");
+      tip.textContent = "";
+      try {
+        await apiFetch("/api/user/profile", {
+          method: "PUT",
+          body: JSON.stringify({
+            email: document.getElementById("f-email").value.trim(),
+            phone: document.getElementById("f-phone").value.trim(),
+            temp_warn_high: document.getElementById("f-temp-high").value.trim(),
+          }),
+        });
+        tip.textContent = "保存成功";
+        tip.className = "ok";
+        loadProfile();
+      } catch (e) {
+        tip.textContent = e.message || "保存失败";
+        tip.className = "err";
+      }
+    });
+
+    document.getElementById("btn-email-test").addEventListener("click", async function () {
+      var tip = document.getElementById("tip");
+      tip.textContent = "发送测试邮件中...";
+      tip.className = "tip";
+      try {
+        await apiFetch("/api/user/email-test", { method: "POST", body: "{}" });
+        tip.textContent = "测试邮件发送成功，请检查收件箱（含垃圾箱）";
+        tip.className = "ok";
+      } catch (e) {
+        tip.textContent = e.message || "测试邮件发送失败";
+        tip.className = "err";
+      }
+    });
+
+    loadProfile();
     document.getElementById("btn-out").addEventListener("click", async function () {
       try {
         await apiFetch("/api/auth/logout", { method: "POST", body: "{}" });

@@ -60,3 +60,16 @@ def insert_report(
             (user_id, device_id, report_type, title, summary, content, meta),
         )
         return int(cur.lastrowid)
+
+
+def delete_for_user(user_id: int, report_id: int) -> bool:
+    """删除报告（仅允许删除属于当前用户的数据）。"""
+    with get_cursor(commit=True) as cur:
+        cur.execute(
+            """
+            DELETE FROM ai_report
+            WHERE id = %s AND user_id = %s
+            """,
+            (report_id, user_id),
+        )
+        return cur.rowcount > 0

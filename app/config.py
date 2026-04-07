@@ -24,3 +24,12 @@ class Config:
     ARK_BASE_URL = (
         os.environ.get("ARK_BASE_URL") or "https://ark.cn-beijing.volces.com/api/v3"
     ).strip()
+
+    # 温度告警邮件（SMTP）
+    SMTP_HOST = (os.environ.get("SMTP_HOST") or "").strip()
+    SMTP_PORT = int(os.environ.get("SMTP_PORT", "465"))
+    SMTP_USER = (os.environ.get("SMTP_USER") or "").strip()
+    SMTP_PASSWORD = (os.environ.get("SMTP_PASSWORD") or "").strip()
+    SMTP_SENDER = (os.environ.get("SMTP_SENDER") or "").strip()
+    SMTP_SSL = (os.environ.get("SMTP_SSL", "1").strip() != "0")
+    TEMP_ALERT_COOLDOWN_MINUTES = int(os.environ.get("TEMP_ALERT_COOLDOWN_MINUTES", "10"))

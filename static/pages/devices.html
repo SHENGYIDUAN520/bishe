@@ -21,12 +21,7 @@
   </header>
   <main class="container">
     <h1>设备管理</h1>
-    <p class="muted">绑定需设备已在库中存在（演示库已预置一台「待绑定」设备）。无硬件时可点击「生成模拟设备」自动创建并绑定。</p>
-
-    <div class="btn-row">
-      <button type="button" class="btn inline" id="btn-demo">生成模拟设备</button>
-    </div>
-    <p id="demo-out" class="tip"></p>
+    <p class="muted">支持三种绑定方式：手动输入、蓝牙读取设备标识、二维码扫码填充。绑定后统一提交到平台接口。</p>
 
     <section class="card wide" style="margin-top:20px;">
       <h2>我的设备</h2>
@@ -43,7 +38,18 @@
 
     <section class="card wide" style="margin-top:20px;">
       <h2>绑定新设备</h2>
-      <p class="muted">演示：设备标识 <code>UNBOUND-DEMO-01</code>，密钥 <code>bind-me-888</code></p>
+      <p class="muted">蓝牙读取只填充设备标识，设备密钥仍需输入（或由二维码一并带出）。</p>
+      <p class="tip">建议：先在串口确认设备已完成注册（`/api/device/register` 返回 `code=0`），再执行绑定。</p>
+      <div class="btn-row">
+        <button type="button" class="btn inline btn-secondary" id="btn-ble-fill">蓝牙读取设备标识</button>
+        <button type="button" class="btn inline btn-secondary" id="btn-scan-qr">扫码填充</button>
+        <button type="button" class="btn inline btn-secondary" id="btn-stop-qr">停止扫码</button>
+      </div>
+      <div class="btn-row" style="margin-top:8px;">
+        <input type="file" id="qr-file" accept="image/*" />
+        <button type="button" class="btn inline btn-secondary" id="btn-parse-qr-file">识别二维码图片</button>
+      </div>
+      <video id="qr-video" style="display:none;max-width:360px;border-radius:8px;margin:10px 0;" autoplay muted playsinline></video>
       <form id="form-bind" class="form-grid">
         <label>设备标识<input name="device_uid" required placeholder="如 UNBOUND-DEMO-01" /></label>
         <label>设备密钥<input name="device_secret" type="password" required /></label>
@@ -53,11 +59,58 @@
         <button type="submit" form="form-bind" class="btn inline">绑定</button>
       </div>
       <p id="bind-tip" class="tip"></p>
+      <p id="scan-tip" class="tip"></p>
     </section>
   </main>
   <script src="/static/js/api.js"></script>
   <script src="/static/js/nav.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
   <script>
+    // 与 BLE 配网页保持一致
+    const BLE_SERVICE_UUID = "9b5c0001-3f38-4f4a-9c2f-2b6c2e4b5c01";
+    const BLE_CHAR_STATUS_UUID = "9b5c0003-3f38-4f4a-9c2f-2b6c2e4b5c01";
+
+    let g_qrStream = null;
+    let g_qrScanTimer = null;
+
+    function setScanTip(msg, ok) {
+      var el = document.getElementById("scan-tip");
+      el.textContent = msg || "";
+      el.className = ok ? "ok" : "tip";
+    }
+
+    function parseBindText(raw) {
+      // 支持 JSON：{"device_uid":"...","device_secret":"..."}
+      // 或普通文本：device_uid=...;device_secret=...
+      var txt = (raw || "").trim();
+      if (!txt) return null;
+      try {
+        var obj = JSON.parse(txt);
+        if (obj && obj.device_uid) return obj;
+      } catch (_) {}
+      var uidMatch = txt.match(/(?:device_uid|uid)\s*[:=]\s*([A-Za-z0-9\-_]+)/i);
+      var secMatch = txt.match(/(?:device_secret|secret|key)\s*[:=]\s*([A-Za-z0-9\-_]+)/i);
+      if (!uidMatch) return null;
+      return {
+        device_uid: uidMatch[1],
+        device_secret: secMatch ? secMatch[1] : "",
+      };
+    }
+
+    function fillBindForm(deviceUid, deviceSecret) {
+      var form = document.getElementById("form-bind");
+      form.elements["device_uid"].value = deviceUid || "";
+      if (deviceSecret) form.elements["device_secret"].value = deviceSecret;
+    }
+
+    function decodeQrFromCanvas(canvas, w, h) {
+      if (!window.jsQR) return null;
+      var ctx = canvas.getContext("2d");
+      var img = ctx.getImageData(0, 0, w, h);
+      var code = window.jsQR(img.data, w, h);
+      return code && code.data ? code.data : null;
+    }
+
     async function refresh() {
       const tbody = document.querySelector("#tbl tbody");
       document.getElementById("list-tip").textContent = "";
@@ -136,23 +189,140 @@
         e.target.reset();
         refresh();
       } catch (err) {
-        tip.textContent = err.message;
+        var msg = err.message || "绑定失败";
+        if (msg.indexOf("设备不存在") >= 0) {
+          msg += "。请先完成 BLE 配网并等待设备 register 成功（必要时按一下复位键重试）。";
+        }
+        tip.textContent = msg;
         tip.className = "err";
       }
     });
 
-    document.getElementById("btn-demo").addEventListener("click", async function () {
-      var out = document.getElementById("demo-out");
-      out.textContent = "创建中…";
+    document.getElementById("btn-ble-fill").addEventListener("click", async function () {
       try {
-        var data = await apiFetch("/api/devices/demo", { method: "POST", body: "{}" });
-        out.innerHTML =
-          "<span class='ok'>" + (data.hint || "") + "</span><br/>标识：<code>" +
-          data.device_uid + "</code> 密钥：<code>" + data.device_secret + "</code>";
-        refresh();
+        if (!navigator.bluetooth) {
+          setScanTip("当前环境不支持 Web Bluetooth（请用 Windows Chrome/Edge + localhost/HTTPS）。", false);
+          return;
+        }
+        setScanTip("打开蓝牙设备选择框...", false);
+        var device = await navigator.bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: [BLE_SERVICE_UUID],
+        });
+        var server = await device.gatt.connect();
+        var svc = await server.getPrimaryService(BLE_SERVICE_UUID);
+        var st = await svc.getCharacteristic(BLE_CHAR_STATUS_UUID);
+        var v = await st.readValue();
+        var txt = new TextDecoder("utf-8").decode(v);
+        var obj = {};
+        try { obj = JSON.parse(txt); } catch (_) {}
+        var uid = obj.device_uid || "";
+        if (!uid) {
+          setScanTip("蓝牙已连接，但未读取到 device_uid（请先让设备完成启动/注册）。", false);
+          return;
+        }
+        fillBindForm(uid, "");
+        setScanTip("已从蓝牙读取 device_uid，设备密钥请手动输入。", true);
+        if (device.gatt && device.gatt.connected) device.gatt.disconnect();
       } catch (e) {
-        out.textContent = e.message;
-        out.className = "err";
+        setScanTip("蓝牙读取失败：" + (e.message || e), false);
+      }
+    });
+
+    document.getElementById("btn-scan-qr").addEventListener("click", async function () {
+      var video = document.getElementById("qr-video");
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setScanTip("当前浏览器不支持摄像头扫码。", false);
+        return;
+      }
+      if (!window.jsQR) {
+        setScanTip("二维码解码库加载失败，请检查网络后刷新页面。", false);
+        return;
+      }
+      try {
+        g_qrStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        video.srcObject = g_qrStream;
+        video.style.display = "block";
+        setScanTip("扫码中：请将二维码对准摄像头。", false);
+
+        var canvas = document.createElement("canvas");
+        var ctx = canvas.getContext("2d");
+        if (g_qrScanTimer) clearInterval(g_qrScanTimer);
+        g_qrScanTimer = setInterval(async function () {
+          if (!video.videoWidth || !video.videoHeight) return;
+          try {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            var raw = decodeQrFromCanvas(canvas, canvas.width, canvas.height);
+            if (!raw) return;
+            raw = raw.trim();
+            var parsed = parseBindText(raw);
+            if (!parsed || !parsed.device_uid) {
+              setScanTip("二维码已识别，但内容不符合绑定格式。", false);
+              return;
+            }
+            fillBindForm(parsed.device_uid, parsed.device_secret || "");
+            setScanTip("扫码成功，已填充绑定信息。", true);
+            document.getElementById("btn-stop-qr").click();
+          } catch (_) {}
+        }, 500);
+      } catch (e) {
+        setScanTip("启动扫码失败：" + (e.message || e), false);
+      }
+    });
+
+    document.getElementById("btn-stop-qr").addEventListener("click", function () {
+      var video = document.getElementById("qr-video");
+      if (g_qrScanTimer) {
+        clearInterval(g_qrScanTimer);
+        g_qrScanTimer = null;
+      }
+      if (g_qrStream) {
+        g_qrStream.getTracks().forEach(function (t) { t.stop(); });
+        g_qrStream = null;
+      }
+      video.style.display = "none";
+      video.srcObject = null;
+      if (!document.getElementById("scan-tip").textContent) {
+        setScanTip("扫码已停止。", false);
+      }
+    });
+
+    document.getElementById("btn-parse-qr-file").addEventListener("click", async function () {
+      var fileInput = document.getElementById("qr-file");
+      var file = fileInput.files && fileInput.files[0];
+      if (!file) {
+        setScanTip("请先选择一张二维码图片。", false);
+        return;
+      }
+      if (!window.jsQR) {
+        setScanTip("二维码解码库加载失败，请检查网络后刷新页面。", false);
+        return;
+      }
+      try {
+        var bmp = await createImageBitmap(file);
+        var canvas = document.createElement("canvas");
+        canvas.width = bmp.width;
+        canvas.height = bmp.height;
+        var ctx = canvas.getContext("2d");
+        ctx.drawImage(bmp, 0, 0);
+
+        var raw = decodeQrFromCanvas(canvas, canvas.width, canvas.height);
+        if (!raw) {
+          setScanTip("未识别到二维码，请换一张更清晰的图片。", false);
+          return;
+        }
+        raw = raw.trim();
+        var parsed = parseBindText(raw);
+        if (!parsed || !parsed.device_uid) {
+          setScanTip("二维码已识别，但内容不符合绑定格式。", false);
+          return;
+        }
+        fillBindForm(parsed.device_uid, parsed.device_secret || "");
+        setScanTip("图片识别成功，已填充绑定信息。", true);
+      } catch (e) {
+        setScanTip("图片识别失败：" + (e.message || e), false);
       }
     });
 

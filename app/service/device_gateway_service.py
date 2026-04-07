@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.dao import command_dao, device_dao, device_data_dao
+from app.service import alert_service
 
 
 def _now_str() -> str:
@@ -95,19 +96,36 @@ def upload_data(device_uid: str, device_secret: str, payload: Any) -> Tuple[bool
         return False, "payload 类型错误，应为对象或数组", 0
 
     cnt = 0
+    max_temp = None
+    latest_humidity = None
     for it in items:
         if not isinstance(it, dict):
             continue
         recorded_at = (it.get("recorded_at") or "").strip() or _now_str()
+        temp = it.get("temperature")
+        hum = it.get("humidity")
         device_data_dao.insert_row(
             device_id=device_id,
-            temperature=it.get("temperature"),
-            humidity=it.get("humidity"),
+            temperature=temp,
+            humidity=hum,
             illuminance=it.get("illuminance"),
             recorded_at=recorded_at,
         )
+        try:
+            ft = float(temp) if temp is not None else None
+        except (TypeError, ValueError):
+            ft = None
+        if ft is not None and (max_temp is None or ft > max_temp):
+            max_temp = ft
+            latest_humidity = hum
         cnt += 1
     device_dao.touch_heartbeat(device_id)
+
+    # 告警邮件：不阻断上报主流程（异常吞掉）
+    try:
+        alert_service.maybe_send_temp_alert(device_id, max_temp, latest_humidity)
+    except Exception:
+        pass
     return True, f"已写入 {cnt} 条数据", cnt
 
 

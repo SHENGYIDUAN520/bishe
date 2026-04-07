@@ -29,6 +29,18 @@
         <label>针对设备（可选，默认取第一台）
           <select id="sel-dev"><option value="">默认第一台</option></select>
         </label>
+        <label>使用环境
+          <select id="sel-env">
+            <option value="machine_room">机房</option>
+            <option value="home" selected>普通家庭</option>
+            <option value="factory">工厂</option>
+            <option value="custom">自定义</option>
+          </select>
+        </label>
+        <label id="env-custom-wrap" style="display:none;">
+          自定义环境描述
+          <textarea id="env-custom" placeholder="例如：办公室机柜+长期开门、需要偏向散热与稳定性" rows="3"></textarea>
+        </label>
       </div>
       <div class="btn-row">
         <button type="button" class="btn inline" id="btn-run">生成分析</button>
@@ -56,6 +68,8 @@
   <script src="/static/js/api.js"></script>
   <script src="/static/js/nav.js"></script>
   <script>
+    let g_detailId = null;
+
     async function loadDevices() {
       var sel = document.getElementById("sel-dev");
       try {
@@ -90,12 +104,33 @@
             "<td>" + (r.title || "—") + "</td>" +
             "<td>" + sum + "</td>" +
             "<td>" + (r.created_at || "") + "</td>" +
-            "<td><button type='button' class='btn inline btn-secondary view' data-id='" + r.id + "'>查看</button></td>";
+            "<td>" +
+              "<button type='button' class='btn inline btn-secondary view' data-id='" + r.id + "'>查看</button> " +
+              "<button type='button' class='btn inline btn-danger del' data-id='" + r.id + "'>删除</button>" +
+            "</td>";
           tbody.appendChild(tr);
         });
         tbody.querySelectorAll(".view").forEach(function (btn) {
           btn.addEventListener("click", function () {
             loadDetail(btn.getAttribute("data-id"));
+          });
+        });
+        tbody.querySelectorAll(".del").forEach(function (btn) {
+          btn.addEventListener("click", async function () {
+            var id = btn.getAttribute("data-id");
+            if (!confirm("确定删除该 AI 报告？")) return;
+            try {
+              await apiFetch("/api/ai/reports/" + id, { method: "DELETE" });
+              if (String(g_detailId) === String(id)) {
+                g_detailId = null;
+                document.getElementById("detail-meta").textContent = "已清空详情";
+                document.getElementById("detail-body").textContent = "—";
+                document.getElementById("detail-body").className = "report-detail muted";
+              }
+              refreshList();
+            } catch (e) {
+              alert(e.message);
+            }
           });
         });
       } catch (e) {
@@ -106,6 +141,7 @@
     async function loadDetail(id) {
       try {
         var r = await apiFetch("/api/ai/reports/" + id);
+        g_detailId = id;
         document.getElementById("detail-meta").textContent =
           "ID " + r.id + " | 设备 " + (r.device_id || "—") + " | " + (r.report_type || "");
         document.getElementById("detail-body").textContent = (r.title || "") + "\n\n" + (r.summary || "") + "\n\n" + (r.content || "");
@@ -115,12 +151,21 @@
       }
     }
 
+    function toggleEnvCustom() {
+      var env = document.getElementById("sel-env").value;
+      document.getElementById("env-custom-wrap").style.display = env === "custom" ? "block" : "none";
+    }
+
     document.getElementById("btn-run").addEventListener("click", async function () {
       var tip = document.getElementById("tip");
       tip.textContent = "";
       var sid = document.getElementById("sel-dev").value;
       var body = {};
       if (sid) body.device_id = parseInt(sid, 10);
+      body.environment_type = document.getElementById("sel-env").value;
+      if (body.environment_type === "custom") {
+        body.custom_context = document.getElementById("env-custom").value || "";
+      }
       try {
         var res = await apiFetch("/api/ai/analyze", { method: "POST", body: JSON.stringify(body) });
         tip.textContent = "已生成报告 #" + res.report_id;
@@ -134,6 +179,9 @@
     });
 
     document.getElementById("btn-refresh").addEventListener("click", refreshList);
+
+    document.getElementById("sel-env").addEventListener("change", toggleEnvCustom);
+    toggleEnvCustom();
 
     loadDevices();
     refreshList();

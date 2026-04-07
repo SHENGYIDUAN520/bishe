@@ -6,8 +6,8 @@ import os
 
 from dotenv import load_dotenv
 
-# 优先加载项目根目录 .env
-load_dotenv()
+# 优先加载项目根目录 .env（覆盖系统中同名环境变量，避免旧值残留）
+load_dotenv(override=True)
 
 from app import create_app
 

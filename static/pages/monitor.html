@@ -40,6 +40,7 @@
     <section class="card wide" style="margin-top:20px;">
       <h2>最新数据</h2>
       <pre id="latest" class="muted" style="margin:0;">—</pre>
+      <p id="alert-status" class="tip" style="margin-top:10px;">最近一次邮件告警状态：暂无</p>
     </section>
 
     <section class="card wide" style="margin-top:20px;">
@@ -62,6 +63,9 @@
   <script>
     var chart;
     var autoTimer;
+    var gTempWarnHigh = null;
+    var gLastPopupAtByDevice = {};
+    var gLastSeenDataIdByDevice = {};
 
     function toApiDatetime(localStr) {
       if (!localStr) return null;
@@ -86,6 +90,71 @@
       } catch (e) {
         if (e.code === 401) window.location.href = "/pages/login.html";
         else sel.innerHTML = "<option value=''>加载失败</option>";
+      }
+    }
+
+    async function loadWarnThreshold() {
+      try {
+        var p = await apiFetch("/api/user/profile");
+        gTempWarnHigh = p.temp_warn_high != null ? parseFloat(p.temp_warn_high) : null;
+      } catch (_) {
+        gTempWarnHigh = null;
+      }
+    }
+
+    async function maybeShowTempAlert(deviceId, latestPayload) {
+      if (gTempWarnHigh == null || !latestPayload) return;
+      if (latestPayload.id == null) return;
+      var dataId = String(latestPayload.id);
+      if (gLastSeenDataIdByDevice[deviceId] === dataId) return;
+      gLastSeenDataIdByDevice[deviceId] = dataId;
+      var t = latestPayload.temperature;
+      var h = latestPayload.humidity;
+      if (t == null || Number(t) <= Number(gTempWarnHigh)) return;
+
+      var now = Date.now();
+      var last = gLastPopupAtByDevice[deviceId] || 0;
+      if (now - last < 5 * 60 * 1000) return;
+      gLastPopupAtByDevice[deviceId] = now;
+
+      var advice = "请检查通风散热并关注设备运行状态。";
+      try {
+        var resp = await apiFetch("/api/ai/temperature-advice", {
+          method: "POST",
+          body: JSON.stringify({
+            temperature: Number(t),
+            humidity: h != null ? Number(h) : null,
+            threshold: Number(gTempWarnHigh),
+          }),
+        });
+        if (resp && resp.advice) advice = resp.advice;
+      } catch (_) {}
+
+      alert(
+        "温度告警！\n" +
+        "当前温度：" + Number(t).toFixed(2) + "℃\n" +
+        "告警阈值：" + Number(gTempWarnHigh).toFixed(2) + "℃\n\n" +
+        "AI建议：\n" + advice
+      );
+    }
+
+    async function loadAlertStatus(deviceId) {
+      var el = document.getElementById("alert-status");
+      try {
+        var s = await apiFetch("/api/user/alert-status/" + deviceId);
+        if (!s) {
+          el.textContent = "最近一次邮件告警状态：暂无";
+          el.className = "tip";
+          return;
+        }
+        var txt = "最近一次邮件告警状态：" + (s.time || "") + " | " + (s.message || s.status || "未知");
+        txt += " | 温度 " + Number(s.temperature || 0).toFixed(2) + "℃ / 阈值 " + Number(s.threshold || 0).toFixed(2) + "℃";
+        if (s.to_email) txt += " | 收件人 " + s.to_email;
+        el.textContent = txt;
+        el.className = s.status === "sent" ? "ok" : (s.status === "failed" ? "err" : "tip");
+      } catch (e) {
+        el.textContent = "最近一次邮件告警状态：查询失败（" + (e.message || "未知错误") + "）";
+        el.className = "err";
       }
     }
 
@@ -126,6 +195,8 @@
       try {
         var latest = await apiFetch("/api/devices/" + id + "/latest");
         document.getElementById("latest").textContent = JSON.stringify(latest.payload, null, 2) || "无数据";
+        maybeShowTempAlert(id, latest.payload);
+        loadAlertStatus(id);
 
         var start = toApiDatetime(document.getElementById("t-start").value);
         var end = toApiDatetime(document.getElementById("t-end").value);
@@ -169,6 +240,7 @@
       this.textContent = "停止自动刷新";
     });
 
+    loadWarnThreshold();
     loadDevices().then(function () {
       var sel = document.getElementById("sel-dev");
       if (sel.options.length && sel.options[0].value) loadData();

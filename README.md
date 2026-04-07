@@ -37,6 +37,14 @@
 
 **若登录提示需要 `cryptography` 包**：MySQL 8 默认 `caching_sha2_password` 认证，已写入 `requirements.txt`；执行 `pip install -r requirements.txt` 即可。
 
+### 环境变量残留避坑（重要）
+
+- 现象：你改了 `.env`（例如 `SMTP_SENDER`），服务仍读取旧值（如历史残留 `监控系统`），导致邮件报错。
+- 原因：进程环境变量优先级高于 `.env`，且 `python-dotenv` 默认不覆盖同名已存在变量。
+- 处理：
+  1) 入口已改为 `load_dotenv(override=True)`，优先使用项目 `.env`。
+  2) 修改 `.env` 后，必须**彻底重启 Flask 进程**（不能只刷新网页）。
+
 ## 目录速览
 
 - `app/routes` — 路由层  
@@ -49,5 +57,8 @@
 
 - 设备网关 `api/device/*` 已实现注册、心跳、数据上传、拉取指令、回执。
 - 新增固件示例：`firmware/esp32_dht11_gateway/esp32_dht11_gateway.ino`（DHT11 接 GPIO27）。
+- 新增 BLE 配网固件：`firmware/esp32_ble_provisioning_gateway/esp32_ble_provisioning_gateway.ino`，配合网页 `static/pages/ble_setup.html`（Windows 桌面 Chrome/Edge + HTTPS/localhost）。
 - 真机联调已验证通过：ESP32 + DHT11 可持续上报并在监测页展示曲线。
 - 经验提示：DHT11 不建议接 GPIO12（会影响启动/下载稳定），统一推荐 GPIO27。
+- 监测告警链路已验证：个人中心可配置邮箱/电话/温度阈值；超温触发监测页弹窗与邮件发送，并在监测页显示最近一次邮件告警状态。
+- AI 报告支持场景化分析：机房、普通家庭、工厂、自定义；支持报告删除。
