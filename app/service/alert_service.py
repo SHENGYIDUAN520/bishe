@@ -13,7 +13,7 @@ import re
 
 from flask import current_app
 
-from app.dao import user_setting_dao
+from app.dao import device_setting_dao
 
 # 简单进程内限流，避免高频刷邮件
 _LAST_SENT_AT = {}
@@ -101,7 +101,7 @@ def maybe_send_temp_alert(device_id: int, temp: Optional[float], humidity: Optio
     """若超过用户阈值则发邮件（冷却期内不重复发送）。"""
     if temp is None:
         return
-    row = user_setting_dao.get_alert_contact_by_device(device_id)
+    row = device_setting_dao.get_alert_contact_by_device(device_id)
     if not row:
         return
 

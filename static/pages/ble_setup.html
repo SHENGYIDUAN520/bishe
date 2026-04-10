@@ -35,7 +35,7 @@
       <p class="tip">提示：Web Bluetooth 仅在<strong>安全上下文</strong>可用（HTTPS 或 localhost）。</p>
     </section>
 
-    <section class="card wide" style="margin-top:20px;">
+    <section class="card wide">
       <h2>配网操作区</h2>
       <label>WiFi 名称（SSID）</label>
       <input type="text" id="ssid" placeholder="例如 Lab_IoT" />
@@ -51,15 +51,16 @@
         <button type="button" class="btn inline btn-secondary" id="btn-send">下发配置</button>
         <button type="button" class="btn inline btn-secondary" id="btn-disconnect">断开</button>
       </div>
-      <p id="log" class="tip" style="margin-top:12px;white-space:pre-wrap;"></p>
+      <p id="log" class="tip log-box"></p>
     </section>
 
-    <section class="card wide" style="margin-top:20px;">
+    <section class="card wide">
       <h2>浏览器支持</h2>
       <p class="muted">Web Bluetooth 在多数手机浏览器上受限，请优先使用 <strong>Windows 桌面 Chrome</strong>。若 <code>navigator.bluetooth</code> 不存在，页面会在真机联调时给出提示。</p>
     </section>
   </main>
   <script src="/static/js/nav.js"></script>
+  <script src="/static/js/toast.js"></script>
   <script>
     // UUID 需与固件完全一致（见 firmware/esp32_ble_provisioning_gateway）
     const SERVICE_UUID = "9b5c0001-3f38-4f4a-9c2f-2b6c2e4b5c01";
@@ -187,6 +188,7 @@
       } catch (e) {
         appendLog(`[${now()}] 失败：${formatBleError(e)}`);
         appendLog("排查：1) 使用 Chrome/Edge 桌面版；2) HTTPS/localhost；3) Windows 蓝牙已开启；4) 固件正在广播。");
+        showToast("蓝牙连接失败", "err");
       }
     });
     document.getElementById("btn-scan-all").addEventListener("click", async () => {
@@ -195,20 +197,25 @@
       } catch (e) {
         appendLog(`[${now()}] 失败：${formatBleError(e)}`);
         appendLog("排查：1) Windows 蓝牙是否开启；2) ESP32 是否在广播（重启/靠近）；3) 若列表很长，优先找名称类似 ESP32-PROV-xxxxxx。");
+        showToast("兼容扫描失败", "err");
       }
     });
     document.getElementById("btn-send").addEventListener("click", async () => {
       try {
         await sendConfig();
+        showToast("配置已下发，等待设备回执", "ok");
       } catch (e) {
         appendLog(`[${now()}] 失败：${e && e.message ? e.message : e}`);
+        showToast(e && e.message ? e.message : "配置下发失败", "err");
       }
     });
     document.getElementById("btn-disconnect").addEventListener("click", async () => {
       try {
         await disconnectBle();
+        showToast("蓝牙已断开", "info");
       } catch (e) {
         appendLog(`[${now()}] 断开失败：${e && e.message ? e.message : e}`);
+        showToast("断开失败", "err");
       }
     });
 

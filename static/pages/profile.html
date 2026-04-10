@@ -38,21 +38,19 @@
         <label>手机号
           <input id="f-phone" type="text" placeholder="可选" />
         </label>
-        <label>告警温度上限（℃）
-          <input id="f-temp-high" type="number" step="0.1" placeholder="如 30.0" />
-        </label>
       </form>
       <p id="tip" class="tip"></p>
-      <div class="btn-row" style="margin-top:16px;">
+      <div class="btn-row mt-4">
         <button type="button" class="btn inline" id="btn-save">保存设置</button>
         <button type="button" class="btn inline btn-secondary" id="btn-email-test">测试邮件</button>
         <button type="button" class="btn inline btn-danger" id="btn-out">退出登录</button>
-        <a class="btn inline btn-secondary" href="/pages/index.html" style="display:inline-block;text-align:center;line-height:normal;text-decoration:none;">返回首页</a>
+        <a class="btn inline btn-secondary link-btn" href="/pages/index.html">返回首页</a>
       </div>
     </section>
   </main>
   <script src="/static/js/api.js"></script>
   <script src="/static/js/nav.js"></script>
+  <script src="/static/js/toast.js"></script>
   <script>
     async function loadProfile() {
       try {
@@ -61,12 +59,11 @@
         document.getElementById("f-nickname").value = p.nickname || "";
         document.getElementById("f-email").value = p.email || "";
         document.getElementById("f-phone").value = p.phone || "";
-        document.getElementById("f-temp-high").value =
-          p.temp_warn_high != null ? p.temp_warn_high : "";
       } catch (e) {
         if (e.code === 401) window.location.href = "/pages/login.html";
         document.getElementById("tip").textContent = e.message || "加载失败";
         document.getElementById("tip").className = "err";
+        showToast(e.message || "加载失败", "err");
       }
     }
 
@@ -79,15 +76,16 @@
           body: JSON.stringify({
             email: document.getElementById("f-email").value.trim(),
             phone: document.getElementById("f-phone").value.trim(),
-            temp_warn_high: document.getElementById("f-temp-high").value.trim(),
           }),
         });
         tip.textContent = "保存成功";
         tip.className = "ok";
+        showToast("个人设置已保存", "ok");
         loadProfile();
       } catch (e) {
         tip.textContent = e.message || "保存失败";
         tip.className = "err";
+        showToast(e.message || "保存失败", "err");
       }
     });
 
@@ -99,9 +97,11 @@
         await apiFetch("/api/user/email-test", { method: "POST", body: "{}" });
         tip.textContent = "测试邮件发送成功，请检查收件箱（含垃圾箱）";
         tip.className = "ok";
+        showToast("测试邮件发送成功", "ok");
       } catch (e) {
         tip.textContent = e.message || "测试邮件发送失败";
         tip.className = "err";
+        showToast(e.message || "测试邮件发送失败", "err");
       }
     });
 

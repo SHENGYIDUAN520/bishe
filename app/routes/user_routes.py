@@ -2,7 +2,7 @@
 """用户资料路由（需登录）。"""
 from flask import Blueprint, request, session
 
-from app.dao import user_dao, user_setting_dao
+from app.dao import user_dao
 from app.service import alert_service, device_service
 from app.utils.auth_helper import login_required
 from app.utils.response import fail, ok
@@ -17,7 +17,6 @@ def profile():
     """返回当前登录用户基本信息。"""
     uid = int(session.get("user_id"))
     row = user_dao.find_by_id(uid) or {}
-    setting = user_setting_dao.get_by_user(uid) or {}
     return ok(
         {
             "user_id": uid,
@@ -25,7 +24,6 @@ def profile():
             "nickname": row.get("nickname"),
             "email": row.get("email"),
             "phone": row.get("phone"),
-            "temp_warn_high": setting.get("temp_warn_high"),
         }
     )
 
@@ -33,30 +31,20 @@ def profile():
 @user_bp.route("/profile", methods=["PUT"])
 @login_required
 def update_profile():
-    """更新邮箱、电话、温度阈值。"""
+    """更新邮箱、电话。"""
     try:
         uid = int(session.get("user_id"))
         body = request.get_json(silent=True) or {}
         email = (body.get("email") or "").strip()
         phone = (body.get("phone") or "").strip()
-        temp_warn_high = body.get("temp_warn_high")
 
         if email and "@" not in email:
             return fail(400, "邮箱格式不正确")
         if phone and len(phone) > 20:
             return fail(400, "手机号长度不能超过 20")
 
-        warn_val = None
-        if temp_warn_high not in (None, ""):
-            warn_val = float(temp_warn_high)
-            if warn_val < -50 or warn_val > 150:
-                return fail(400, "温度阈值范围应为 -50~150")
-
         user_dao.update_contact(uid, email, phone)
-        user_setting_dao.upsert_temp_warn_high(uid, warn_val)
         return ok(None, msg="保存成功")
-    except ValueError:
-        return fail(400, "温度阈值必须为数字")
     except Exception as e:
         return fail(500, f"保存失败：{e!s}")
 

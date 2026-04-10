@@ -20,11 +20,21 @@
     </nav>
   </header>
   <main class="container">
-    <h1>AI 数据分析报告</h1>
-    <p class="muted">服务端已支持<strong>火山方舟</strong>（配置 <code>AI_API_KEY</code> + <code>AI_MODEL</code> 后点击生成即调大模型）；未配置时仍为本地统计模板。</p>
+    <section class="page-head">
+      <div>
+        <h1>AI 数据分析报告</h1>
+        <p class="muted">支持一键生成、列表管理与详情回看。</p>
+      </div>
+    </section>
+    <div class="kpi-strip">
+      <div class="kpi-card"><div class="kpi-label">报告总数</div><div class="kpi-value" id="k-ai-total">0</div></div>
+      <div class="kpi-card"><div class="kpi-label">今日新增</div><div class="kpi-value" id="k-ai-today">0</div></div>
+      <div class="kpi-card"><div class="kpi-label">方舟报告</div><div class="kpi-value" id="k-ai-ark">0</div></div>
+      <div class="kpi-card"><div class="kpi-label">本地报告</div><div class="kpi-value" id="k-ai-local">0</div></div>
+    </div>
 
     <section class="card wide">
-      <h2>生成新报告</h2>
+      <div class="card-head"><div><h2>生成新报告</h2></div></div>
       <div class="form-grid">
         <label>针对设备（可选，默认取第一台）
           <select id="sel-dev"><option value="">默认第一台</option></select>
@@ -49,9 +59,9 @@
       <p id="tip" class="tip"></p>
     </section>
 
-    <section class="card wide" style="margin-top:20px;">
-      <h2>报告列表</h2>
-      <table class="data-table" id="tbl">
+    <section class="card wide">
+      <div class="card-head"><div><h2>报告列表</h2></div></div>
+      <table class="data-table responsive" id="tbl">
         <thead>
           <tr><th>ID</th><th>标题</th><th>摘要</th><th>时间</th><th>操作</th></tr>
         </thead>
@@ -59,16 +69,29 @@
       </table>
     </section>
 
-    <section class="card wide" style="margin-top:20px;">
-      <h2>报告详情</h2>
-      <p class="muted" id="detail-meta">点击上表「查看」</p>
-      <div id="detail-body" class="report-detail muted">—</div>
-    </section>
   </main>
+  <div class="modal-mask" id="report-modal" aria-hidden="true">
+    <div class="modal-card">
+      <div class="card-head">
+        <div>
+          <h2>报告详情</h2>
+          <p class="muted" id="detail-meta">—</p>
+        </div>
+        <div class="table-actions">
+          <button type="button" class="btn inline btn-secondary" id="btn-prev-report">上一条</button>
+          <button type="button" class="btn inline btn-secondary" id="btn-next-report">下一条</button>
+          <button type="button" class="btn inline btn-secondary" id="btn-close-modal">关闭</button>
+        </div>
+      </div>
+      <div id="detail-body" class="report-detail muted">—</div>
+    </div>
+  </div>
   <script src="/static/js/api.js"></script>
   <script src="/static/js/nav.js"></script>
+  <script src="/static/js/toast.js"></script>
   <script>
     let g_detailId = null;
+    let g_reportIds = [];
 
     async function loadDevices() {
       var sel = document.getElementById("sel-dev");
@@ -90,24 +113,43 @@
       var tbody = document.querySelector("#tbl tbody");
       try {
         var list = await apiFetch("/api/ai/reports");
+        g_reportIds = (list || []).map(function (r) { return Number(r.id); });
         tbody.innerHTML = "";
         if (!list.length) {
+          document.getElementById("k-ai-total").textContent = 0;
+          document.getElementById("k-ai-today").textContent = 0;
+          document.getElementById("k-ai-ark").textContent = 0;
+          document.getElementById("k-ai-local").textContent = 0;
           tbody.innerHTML = "<tr><td colspan='5' class='muted'>暂无报告</td></tr>";
           return;
         }
+        var today = new Date().toISOString().slice(0, 10);
+        var todayCnt = 0;
+        var arkCnt = 0;
+        var localCnt = 0;
+        list.forEach(function (r) {
+          var c = String(r.created_at || "");
+          if (c.slice(0, 10) === today) todayCnt++;
+          if (String(r.report_type || "").indexOf("ark") >= 0) arkCnt++;
+          else localCnt++;
+        });
+        document.getElementById("k-ai-total").textContent = list.length;
+        document.getElementById("k-ai-today").textContent = todayCnt;
+        document.getElementById("k-ai-ark").textContent = arkCnt;
+        document.getElementById("k-ai-local").textContent = localCnt;
         list.forEach(function (r) {
           var tr = document.createElement("tr");
           var sum = (r.summary || "").replace(/</g, "&lt;");
           if (sum.length > 60) sum = sum.slice(0, 60) + "…";
           tr.innerHTML =
-            "<td>" + r.id + "</td>" +
-            "<td>" + (r.title || "—") + "</td>" +
-            "<td>" + sum + "</td>" +
-            "<td>" + (r.created_at || "") + "</td>" +
-            "<td>" +
-              "<button type='button' class='btn inline btn-secondary view' data-id='" + r.id + "'>查看</button> " +
+            "<td data-label='ID'>" + r.id + "</td>" +
+            "<td data-label='标题'>" + (r.title || "—") + "</td>" +
+            "<td data-label='摘要'>" + sum + "</td>" +
+            "<td data-label='时间'>" + (r.created_at || "") + "</td>" +
+            "<td data-label='操作'><div class='table-actions'>" +
+              "<button type='button' class='btn inline btn-secondary view' data-id='" + r.id + "'>查看</button>" +
               "<button type='button' class='btn inline btn-danger del' data-id='" + r.id + "'>删除</button>" +
-            "</td>";
+            "</div></td>";
           tbody.appendChild(tr);
         });
         tbody.querySelectorAll(".view").forEach(function (btn) {
@@ -123,13 +165,12 @@
               await apiFetch("/api/ai/reports/" + id, { method: "DELETE" });
               if (String(g_detailId) === String(id)) {
                 g_detailId = null;
-                document.getElementById("detail-meta").textContent = "已清空详情";
-                document.getElementById("detail-body").textContent = "—";
-                document.getElementById("detail-body").className = "report-detail muted";
+                closeDetailModal();
               }
+              showToast("报告已删除", "ok");
               refreshList();
             } catch (e) {
-              alert(e.message);
+              showToast(e.message || "删除失败", "err");
             }
           });
         });
@@ -146,9 +187,47 @@
           "ID " + r.id + " | 设备 " + (r.device_id || "—") + " | " + (r.report_type || "");
         document.getElementById("detail-body").textContent = (r.title || "") + "\n\n" + (r.summary || "") + "\n\n" + (r.content || "");
         document.getElementById("detail-body").className = "report-detail";
+        openDetailModal();
       } catch (e) {
-        document.getElementById("detail-body").textContent = e.message;
+        showToast(e.message || "详情加载失败", "err");
       }
+    }
+
+    function openDetailModal() {
+      var m = document.getElementById("report-modal");
+      m.classList.add("show");
+      m.setAttribute("aria-hidden", "false");
+      document.body.classList.add("modal-open");
+      syncDetailNavButtons();
+    }
+
+    function closeDetailModal() {
+      var m = document.getElementById("report-modal");
+      if (!m.classList.contains("show")) return;
+      m.classList.remove("show");
+      m.setAttribute("aria-hidden", "true");
+      window.setTimeout(function () {
+        document.body.classList.remove("modal-open");
+        document.getElementById("detail-meta").textContent = "—";
+        document.getElementById("detail-body").textContent = "—";
+        document.getElementById("detail-body").className = "report-detail muted";
+      }, 220);
+    }
+
+    function syncDetailNavButtons() {
+      var prev = document.getElementById("btn-prev-report");
+      var next = document.getElementById("btn-next-report");
+      var idx = g_reportIds.indexOf(Number(g_detailId));
+      prev.disabled = idx <= 0;
+      next.disabled = idx < 0 || idx >= g_reportIds.length - 1;
+    }
+
+    function stepDetail(offset) {
+      var idx = g_reportIds.indexOf(Number(g_detailId));
+      if (idx < 0) return;
+      var target = g_reportIds[idx + offset];
+      if (!target) return;
+      loadDetail(target);
     }
 
     function toggleEnvCustom() {
@@ -170,15 +249,30 @@
         var res = await apiFetch("/api/ai/analyze", { method: "POST", body: JSON.stringify(body) });
         tip.textContent = "已生成报告 #" + res.report_id;
         tip.className = "ok";
+        showToast("已生成报告 #" + res.report_id, "ok");
         refreshList();
         loadDetail(res.report_id);
       } catch (e) {
         tip.textContent = e.message;
         tip.className = "err";
+        showToast(e.message || "生成失败", "err");
       }
     });
 
     document.getElementById("btn-refresh").addEventListener("click", refreshList);
+    document.getElementById("btn-close-modal").addEventListener("click", closeDetailModal);
+    document.getElementById("btn-prev-report").addEventListener("click", function () {
+      stepDetail(-1);
+    });
+    document.getElementById("btn-next-report").addEventListener("click", function () {
+      stepDetail(1);
+    });
+    document.getElementById("report-modal").addEventListener("click", function (e) {
+      if (e.target.id === "report-modal") closeDetailModal();
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") closeDetailModal();
+    });
 
     document.getElementById("sel-env").addEventListener("change", toggleEnvCustom);
     toggleEnvCustom();

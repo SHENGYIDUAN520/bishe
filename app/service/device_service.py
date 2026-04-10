@@ -5,7 +5,7 @@
 import secrets
 from typing import Any, Dict, List, Optional, Tuple
 
-from app.dao import device_dao
+from app.dao import device_dao, device_setting_dao
 
 
 def assert_owned(user_id: int, device_id: int) -> Optional[Dict]:
@@ -21,7 +21,12 @@ def assert_owned(user_id: int, device_id: int) -> Optional[Dict]:
 
 def list_for_user(user_id: int) -> List[Dict]:
     """用户设备列表（不含密钥）。"""
-    return device_dao.list_by_user_id(user_id)
+    rows = device_dao.list_by_user_id(user_id)
+    dids = [int(r["id"]) for r in rows]
+    setting_map = device_setting_dao.list_by_device_ids(dids)
+    for r in rows:
+        r["temp_warn_high"] = setting_map.get(int(r["id"]))
+    return rows
 
 
 def bind_device(user_id: int, device_uid: str, device_secret: str, name: Optional[str]) -> Tuple[bool, str]:
@@ -56,6 +61,22 @@ def update_name(user_id: int, device_id: int, name: str) -> Tuple[bool, str]:
         return False, "设备不存在或无权操作"
     device_dao.update_device_name(device_id, nm)
     return True, "已保存"
+
+
+def update_temp_warn_high(user_id: int, device_id: int, temp_warn_high) -> Tuple[bool, str]:
+    """更新设备独立告警温度上限。"""
+    if not assert_owned(user_id, device_id):
+        return False, "设备不存在或无权操作"
+    warn_val = None
+    if temp_warn_high not in (None, ""):
+        try:
+            warn_val = float(temp_warn_high)
+        except (TypeError, ValueError):
+            return False, "温度阈值必须为数字"
+        if warn_val < -50 or warn_val > 150:
+            return False, "温度阈值范围应为 -50~150"
+    device_setting_dao.upsert_temp_warn_high(device_id, warn_val)
+    return True, "设备告警阈值已保存"
 
 
 def remove_device(user_id: int, device_id: int) -> Tuple[bool, str]:

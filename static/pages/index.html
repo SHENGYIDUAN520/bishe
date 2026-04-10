@@ -20,66 +20,131 @@
     </nav>
   </header>
   <main class="container">
-    <h1>数据概览</h1>
-    <p class="muted">展示当前账号下设备规模与今日入库数据量；设备未上线时仍可使用「演示数据」体验流程。</p>
+    <section class="overview-hero card wide">
+      <div>
+        <p class="hero-kicker">Dashboard</p>
+        <h1>数据概览</h1>
+        <p class="muted">首页聚合设备状态、账号信息和关键操作入口。</p>
+      </div>
+      <div class="hero-actions">
+        <button type="button" class="btn inline" id="btn-reload">刷新概览</button>
+      </div>
+    </section>
 
-    <div class="stat-grid" id="stats">
-      <div class="stat-box"><span>我的设备</span><strong id="s-dev">—</strong></div>
-      <div class="stat-box"><span>今日数据条数</span><strong id="s-today">—</strong></div>
+    <div class="kpi-strip" id="stats">
+      <div class="kpi-card kpi-card-clean"><div class="kpi-label">我的设备</div><div class="kpi-value" id="s-dev">—</div></div>
+      <div class="kpi-card kpi-card-clean"><div class="kpi-label">今日数据条数</div><div class="kpi-value" id="s-today">—</div></div>
+      <div class="kpi-card kpi-card-clean"><div class="kpi-label">在线设备</div><div class="kpi-value" id="s-online">—</div></div>
+      <div class="kpi-card kpi-card-clean"><div class="kpi-label">离线设备</div><div class="kpi-value" id="s-offline">—</div></div>
     </div>
 
     <section class="card wide">
-      <h2>设备状态一览</h2>
-      <p class="muted" id="dev-hint"></p>
-      <table class="data-table" id="tbl-dev">
+      <div class="card-head">
+        <div>
+          <h2>设备状态一览</h2>
+          <p class="muted" id="dev-hint">最近心跳 5 分钟内视为在线。</p>
+        </div>
+      </div>
+      <table class="data-table responsive" id="tbl-dev">
         <thead>
-          <tr><th>名称</th><th>设备标识</th><th>最后心跳</th><th>固件</th></tr>
+          <tr><th>名称</th><th>设备标识</th><th>状态</th><th>最后心跳</th><th>固件</th></tr>
         </thead>
         <tbody></tbody>
       </table>
     </section>
 
-    <section class="card wide" style="margin-top:20px;">
-      <h2>当前登录用户</h2>
-      <pre id="profile" class="muted" style="margin:0;font-size:0.9rem;">加载中…</pre>
-    </section>
+    <div class="grid-2">
+      <section class="card wide">
+        <div class="card-head">
+          <div><h2>当前登录用户</h2></div>
+        </div>
+        <div class="kv-grid" id="profile">
+          <div class="kv-item"><span>用户名</span><strong id="u-username">—</strong></div>
+          <div class="kv-item"><span>昵称</span><strong id="u-nickname">—</strong></div>
+          <div class="kv-item"><span>邮箱</span><strong id="u-email">—</strong></div>
+          <div class="kv-item"><span>手机号</span><strong id="u-phone">—</strong></div>
+        </div>
+      </section>
+      <section class="card wide">
+        <div class="card-head">
+          <div><h2>快捷操作</h2></div>
+        </div>
+        <div class="quick-links clean">
+          <a class="action-tile" href="/pages/devices.html"><strong>设备管理</strong><span>绑定设备与阈值配置</span></a>
+          <a class="action-tile" href="/pages/monitor.html"><strong>数据监测</strong><span>查看实时趋势图与告警</span></a>
+          <a class="action-tile" href="/pages/control.html"><strong>远程控制</strong><span>下发指令并查看回执</span></a>
+          <a class="action-tile" href="/pages/ai_report.html"><strong>AI 报告</strong><span>生成与管理分析报告</span></a>
+        </div>
+      </section>
+    </div>
   </main>
   <script src="/static/js/api.js"></script>
   <script src="/static/js/nav.js"></script>
+  <script src="/static/js/toast.js"></script>
   <script>
     async function load() {
+      var btn = document.getElementById("btn-reload");
+      var prevText = btn ? btn.textContent : "";
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "刷新中...";
+      }
       const tbody = document.querySelector("#tbl-dev tbody");
       try {
         const dash = await apiFetch("/api/dashboard/overview");
         document.getElementById("s-dev").textContent = dash.device_count;
         document.getElementById("s-today").textContent = dash.today_data_count;
+        const now = Date.now();
+        const online = (dash.devices || []).filter(function (d) {
+          if (!d.last_heartbeat) return false;
+          var t = new Date(String(d.last_heartbeat).replace(" ", "T")).getTime();
+          return !Number.isNaN(t) && (now - t) <= 5 * 60 * 1000;
+        }).length;
+        document.getElementById("s-online").textContent = online;
+        document.getElementById("s-offline").textContent = Math.max((dash.device_count || 0) - online, 0);
         tbody.innerHTML = "";
         if (!dash.devices || !dash.devices.length) {
           document.getElementById("dev-hint").textContent =
             "暂无绑定设备。请到「设备管理」绑定演示设备 UNBOUND-DEMO-01 / bind-me-888，或生成模拟设备。";
-          tbody.innerHTML = "<tr><td colspan='4' class='muted'>无数据</td></tr>";
+          tbody.innerHTML = "<tr><td colspan='5' class='muted'>无数据</td></tr>";
         } else {
           document.getElementById("dev-hint").textContent = "";
           dash.devices.forEach(function (d) {
             const tr = document.createElement("tr");
+            var isOnline = false;
+            if (d.last_heartbeat) {
+              var t2 = new Date(String(d.last_heartbeat).replace(" ", "T")).getTime();
+              isOnline = !Number.isNaN(t2) && (now - t2) <= 5 * 60 * 1000;
+            }
             tr.innerHTML =
-              "<td>" + (d.name || "—") + "</td>" +
-              "<td><code>" + (d.device_uid || "") + "</code></td>" +
-              "<td>" + (d.last_heartbeat || "从未上报") + "</td>" +
-              "<td>" + (d.firmware_ver || "—") + "</td>";
+              "<td data-label='名称'>" + (d.name || "—") + "</td>" +
+              "<td data-label='设备标识'><code>" + (d.device_uid || "") + "</code></td>" +
+              "<td data-label='状态'><span class='" + (isOnline ? "status-pill on" : "status-pill off") + "'>" + (isOnline ? "在线" : "离线") + "</span></td>" +
+              "<td data-label='最后心跳'>" + (d.last_heartbeat || "从未上报") + "</td>" +
+              "<td data-label='固件'>" + (d.firmware_ver || "—") + "</td>";
             tbody.appendChild(tr);
           });
         }
         const u = await apiFetch("/api/user/profile");
-        document.getElementById("profile").textContent = JSON.stringify(u, null, 2);
+        document.getElementById("u-username").textContent = u.username || "—";
+        document.getElementById("u-nickname").textContent = u.nickname || "—";
+        document.getElementById("u-email").textContent = u.email || "—";
+        document.getElementById("u-phone").textContent = u.phone || "—";
       } catch (e) {
         if (e.code === 401) {
           window.location.href = "/pages/login.html";
           return;
         }
-        document.getElementById("profile").textContent = e.message || "加载失败";
+        document.getElementById("u-username").textContent = "加载失败";
+        showToast(e.message || "概览加载失败", "err");
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = prevText || "刷新概览";
+        }
       }
     }
+    document.getElementById("btn-reload").addEventListener("click", load);
     load();
   </script>
 </body>

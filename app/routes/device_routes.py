@@ -70,6 +70,21 @@ def update_device(device_id):
         return fail(500, f"更新失败：{e!s}")
 
 
+@device_bp.route("/<int:device_id>/alert-threshold", methods=["PUT"])
+@login_required
+def update_device_alert_threshold(device_id):
+    """更新设备独立温度告警阈值：JSON { temp_warn_high }。"""
+    try:
+        uid = current_user_id()
+        body = request.get_json(silent=True) or {}
+        okb, msg = device_service.update_temp_warn_high(uid, device_id, body.get("temp_warn_high"))
+        if not okb:
+            return fail(400, msg)
+        return ok({"id": device_id}, msg=msg)
+    except Exception as e:
+        return fail(500, f"更新失败：{e!s}")
+
+
 @device_bp.route("/<int:device_id>", methods=["DELETE"])
 @login_required
 def delete_device(device_id):

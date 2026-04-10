@@ -20,11 +20,21 @@
     </nav>
   </header>
   <main class="container">
-    <h1>远程控制</h1>
-    <p class="muted">指令写入 <code>command_log</code>，状态为 <code>pending</code>，待 ESP32 调用网关接口拉取后执行。无硬件时仍可演示「下发记录」流程。</p>
+    <section class="page-head">
+      <div>
+        <h1>远程控制</h1>
+        <p class="muted">下发指令并查看设备回执状态。</p>
+      </div>
+    </section>
+    <div class="kpi-strip">
+      <div class="kpi-card"><div class="kpi-label">指令总数</div><div class="kpi-value" id="k-cmd-total">0</div></div>
+      <div class="kpi-card"><div class="kpi-label">待执行</div><div class="kpi-value" id="k-cmd-pending">0</div></div>
+      <div class="kpi-card"><div class="kpi-label">执行成功</div><div class="kpi-value" id="k-cmd-done">0</div></div>
+      <div class="kpi-card"><div class="kpi-label">执行失败</div><div class="kpi-value" id="k-cmd-fail">0</div></div>
+    </div>
 
     <section class="card wide">
-      <h2>下发指令</h2>
+      <div class="card-head"><div><h2>下发指令</h2></div></div>
       <div class="form-grid">
         <label>目标设备<select id="sel-dev"><option value="">加载中…</option></select></label>
         <label>指令类型
@@ -44,12 +54,12 @@
       <p id="tip" class="tip"></p>
     </section>
 
-    <section class="card wide" style="margin-top:20px;">
-      <h2>指令记录</h2>
+    <section class="card wide">
+      <div class="card-head"><div><h2>指令记录</h2></div></div>
       <div class="btn-row">
         <button type="button" class="btn inline btn-secondary" id="btn-refresh">刷新列表</button>
       </div>
-      <table class="data-table" id="tbl">
+      <table class="data-table responsive" id="tbl">
         <thead>
           <tr><th>时间</th><th>类型</th><th>参数</th><th>状态</th><th>回执</th></tr>
         </thead>
@@ -59,6 +69,7 @@
   </main>
   <script src="/static/js/api.js"></script>
   <script src="/static/js/nav.js"></script>
+  <script src="/static/js/toast.js"></script>
   <script>
     async function loadDevices() {
       var sel = document.getElementById("sel-dev");
@@ -92,22 +103,37 @@
         var res = await apiFetch("/api/devices/" + id + "/commands");
         tbody.innerHTML = "";
         if (!res.list || !res.list.length) {
+          document.getElementById("k-cmd-total").textContent = 0;
+          document.getElementById("k-cmd-pending").textContent = 0;
+          document.getElementById("k-cmd-done").textContent = 0;
+          document.getElementById("k-cmd-fail").textContent = 0;
           tbody.innerHTML = "<tr><td colspan='5' class='muted'>暂无记录</td></tr>";
           return;
         }
+        var pending = 0;
+        var done = 0;
+        var fail = 0;
         res.list.forEach(function (c) {
+          if (c.status === "pending" || c.status === "sent") pending++;
+          else if (c.status === "done") done++;
+          else if (c.status === "fail") fail++;
           var tr = document.createElement("tr");
           tr.innerHTML =
-            "<td>" + c.created_at + "</td>" +
-            "<td><code>" + c.command_type + "</code></td>" +
-            "<td><code style='font-size:0.8rem'>" +
+            "<td data-label='时间'>" + c.created_at + "</td>" +
+            "<td data-label='类型'><code>" + c.command_type + "</code></td>" +
+            "<td data-label='参数'><code class='mono-mini'>" +
             (c.payload ? JSON.stringify(c.payload) : "—") + "</code></td>" +
-            "<td>" + c.status + "</td>" +
-            "<td>" + (c.result_msg || "—") + "</td>";
+            "<td data-label='状态'>" + c.status + "</td>" +
+            "<td data-label='回执'>" + (c.result_msg || "—") + "</td>";
           tbody.appendChild(tr);
         });
+        document.getElementById("k-cmd-total").textContent = res.list.length;
+        document.getElementById("k-cmd-pending").textContent = pending;
+        document.getElementById("k-cmd-done").textContent = done;
+        document.getElementById("k-cmd-fail").textContent = fail;
       } catch (e) {
         tbody.innerHTML = "<tr><td colspan='5' class='err'>" + e.message + "</td></tr>";
+        showToast(e.message || "记录加载失败", "err");
       }
     }
 
@@ -123,11 +149,13 @@
           payload = JSON.parse(raw);
         } catch (e) {
           tip.textContent = "参数须为合法 JSON";
+          showToast("参数须为合法 JSON", "err");
           return;
         }
       }
       if (!id) {
         tip.textContent = "请选择设备";
+        showToast("请选择设备", "info");
         return;
       }
       try {
@@ -137,10 +165,12 @@
         });
         tip.textContent = "已记录";
         tip.className = "ok";
+        showToast("指令已下发并入队", "ok");
         refreshList();
       } catch (e) {
         tip.textContent = e.message;
         tip.className = "err";
+        showToast(e.message || "下发失败", "err");
       }
     });
 
