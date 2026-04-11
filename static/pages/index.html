@@ -20,23 +20,44 @@
     </nav>
   </header>
   <main class="container">
-    <section class="overview-hero card wide">
-      <div>
-        <p class="hero-kicker">Dashboard</p>
+    <section class="overview-hero card wide overview-hero--lux">
+      <div class="overview-hero__main">
+        <p class="hero-kicker"><span class="hero-badge">LIVE</span> Dashboard</p>
         <h1>数据概览</h1>
-        <p class="muted">首页聚合设备状态、账号信息和关键操作入口。</p>
+        <p class="muted hero-lead">设备状态、账号信息与关键入口一站聚合，支持刷新同步最新数据。</p>
+        <p class="hero-sync" id="dash-updated" aria-live="polite">等待同步…</p>
       </div>
       <div class="hero-actions">
         <button type="button" class="btn inline" id="btn-reload">刷新概览</button>
       </div>
     </section>
 
-    <div class="kpi-strip" id="stats">
+    <div class="kpi-strip kpi-strip--lux" id="stats">
       <div class="kpi-card kpi-card-clean"><div class="kpi-label">我的设备</div><div class="kpi-value" id="s-dev">—</div></div>
       <div class="kpi-card kpi-card-clean"><div class="kpi-label">今日数据条数</div><div class="kpi-value" id="s-today">—</div></div>
       <div class="kpi-card kpi-card-clean"><div class="kpi-label">在线设备</div><div class="kpi-value" id="s-online">—</div></div>
       <div class="kpi-card kpi-card-clean"><div class="kpi-label">离线设备</div><div class="kpi-value" id="s-offline">—</div></div>
     </div>
+
+    <section class="card wide dash-insight" aria-label="关键指标">
+      <div class="dash-insight-grid">
+        <div class="dash-insight-cell">
+          <span class="dash-insight-label">今日数据上报</span>
+          <div class="dash-insight-value"><strong id="insight-today">—</strong><span class="dash-insight-unit">条</span></div>
+          <div class="dash-insight-bar" aria-hidden="true"><span class="dash-insight-bar-fill" id="insight-bar"></span></div>
+        </div>
+        <div class="dash-insight-cell">
+          <span class="dash-insight-label">在线率（5 分钟窗）</span>
+          <div class="dash-insight-value"><strong id="insight-rate">—</strong><span class="dash-insight-unit">%</span></div>
+          <p class="dash-insight-hint muted" id="insight-rate-hint">需至少 1 台设备</p>
+        </div>
+        <div class="dash-insight-cell">
+          <span class="dash-insight-label">AI 分析报告</span>
+          <div class="dash-insight-value"><strong id="insight-reports">—</strong><span class="dash-insight-unit">份</span></div>
+          <a class="dash-insight-link" href="/pages/ai_report.html">管理报告</a>
+        </div>
+      </div>
+    </section>
 
     <section class="card wide">
       <div class="card-head">
@@ -77,11 +98,157 @@
         </div>
       </section>
     </div>
+
+    <div class="grid-2 dash-bottom">
+      <section class="card wide dash-card--reports">
+        <div class="card-head">
+          <div>
+            <h2>最近 AI 报告</h2>
+            <p class="muted">摘要级预览，完整版请在报告中心查看。</p>
+          </div>
+          <a class="dash-more-link" href="/pages/ai_report.html">全部报告 →</a>
+        </div>
+        <ul class="dash-feed" id="dash-reports"><li class="muted">加载中…</li></ul>
+      </section>
+      <section class="card wide dash-card--health">
+        <div class="card-head">
+          <div>
+            <h2>连接健康度</h2>
+            <p class="muted">按最近 5 分钟内心跳统计在线占比。</p>
+          </div>
+        </div>
+        <div class="dash-health">
+          <div class="dash-health-ring-wrap">
+            <div class="dash-health-ring" id="dash-health-ring" role="img" aria-label="在线比例"></div>
+            <span class="dash-health-ring__center" id="dash-health-center">—</span>
+          </div>
+          <div class="dash-health-meta">
+            <p class="dash-health-status" id="dash-health-pct">—</p>
+            <p class="muted dash-health-tip" id="dash-health-tip">加载中…</p>
+          </div>
+        </div>
+        <div class="dash-tips">
+          <p class="dash-tip-line"><span class="dash-tip-dot" aria-hidden="true"></span>监测页支持 24h～30d 趋势与设备级温度告警阈值</p>
+          <p class="dash-tip-line"><span class="dash-tip-dot" aria-hidden="true"></span>蓝牙配网页可为新设备写入 Wi-Fi 并完成注册</p>
+        </div>
+      </section>
+    </div>
+
+    <footer class="dash-page-foot muted" id="dash-foot">物联网设备管理平台 · 概览</footer>
   </main>
   <script src="/static/js/api.js"></script>
   <script src="/static/js/nav.js"></script>
   <script src="/static/js/toast.js"></script>
   <script>
+    function escapeHtml(s) {
+      return String(s || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function syncTimestamp() {
+      var el = document.getElementById("dash-updated");
+      if (!el) return;
+      var d = new Date();
+      var s =
+        d.getFullYear() +
+        "-" +
+        String(d.getMonth() + 1).padStart(2, "0") +
+        "-" +
+        String(d.getDate()).padStart(2, "0") +
+        " " +
+        String(d.getHours()).padStart(2, "0") +
+        ":" +
+        String(d.getMinutes()).padStart(2, "0") +
+        ":" +
+        String(d.getSeconds()).padStart(2, "0");
+      el.textContent = "数据已同步 · " + s;
+      var foot = document.getElementById("dash-foot");
+      if (foot) foot.textContent = "物联网设备管理平台 · 概览 · 最近同步 " + s;
+    }
+
+    function renderInsight(todayCount, online, total, reportCount) {
+      var t = document.getElementById("insight-today");
+      var bar = document.getElementById("insight-bar");
+      var r = document.getElementById("insight-rate");
+      var rh = document.getElementById("insight-rate-hint");
+      var rep = document.getElementById("insight-reports");
+      if (t) t.textContent = todayCount != null ? String(todayCount) : "—";
+      if (bar) {
+        var w = Math.min(100, Math.max(4, Math.log10((todayCount || 0) + 1) * 28));
+        bar.style.width = (todayCount > 0 ? w : 4) + "%";
+      }
+      if (r && rh) {
+        if (!total) {
+          r.textContent = "—";
+          rh.textContent = "绑定设备后计算";
+        } else {
+          var pct = Math.round((100 * online) / total);
+          r.textContent = String(pct);
+          rh.textContent = pct >= 80 ? "连接稳定" : pct >= 40 ? "部分离线" : "建议排查网络";
+        }
+      }
+      if (rep) rep.textContent = reportCount != null ? String(reportCount) : "—";
+    }
+
+    function renderDashHealth(online, total) {
+      var ring = document.getElementById("dash-health-ring");
+      var center = document.getElementById("dash-health-center");
+      var pctEl = document.getElementById("dash-health-pct");
+      var tipEl = document.getElementById("dash-health-tip");
+      if (!ring || !pctEl || !tipEl) return;
+      ring.classList.toggle("dash-health-ring--empty", !total);
+      if (center) center.textContent = "—";
+      if (!total) {
+        ring.style.setProperty("--dash-p", "0");
+        pctEl.textContent = "暂无可用设备";
+        tipEl.textContent = "绑定设备后，将在此展示在线比例与环形图。";
+        return;
+      }
+      var pct = Math.round((100 * online) / total);
+      ring.style.setProperty("--dash-p", String(pct));
+      if (center) center.textContent = pct + "%";
+      pctEl.textContent =
+        pct >= 80 ? "整体连接稳定" : pct >= 50 ? "存在少量离线" : pct > 0 ? "需关注离线设备" : "全部离线";
+      tipEl.textContent = online + " / " + total + " 台在心跳窗口内在线";
+    }
+
+    function renderDashReports(rows) {
+      var ul = document.getElementById("dash-reports");
+      if (!ul) return;
+      ul.innerHTML = "";
+      var list = Array.isArray(rows) ? rows : [];
+      if (!list.length) {
+        ul.innerHTML =
+          "<li class=\"dash-feed-empty muted\">暂无报告。<a href=\"/pages/ai_report.html\">去生成一条</a></li>";
+        return;
+      }
+      list.slice(0, 4).forEach(function (r, i) {
+        var sum = String(r.summary || "").trim();
+        if (sum.length > 64) sum = sum.slice(0, 64) + "…";
+        var li = document.createElement("li");
+        var num = String(i + 1).padStart(2, "0");
+        var rid = r.id != null ? String(r.id) : "";
+        var href = rid ? "/pages/ai_report.html?report=" + encodeURIComponent(rid) : "/pages/ai_report.html";
+        li.innerHTML =
+          "<a class=\"dash-feed-item dash-feed-link\" href=\"" +
+          href +
+          "\">" +
+          "<span class=\"dash-feed-idx\">" +
+          num +
+          "</span><div class=\"dash-feed-body\"><div class=\"dash-feed-top\"><strong class=\"dash-feed-title\">" +
+          escapeHtml(r.title || "未命名报告") +
+          "</strong><span class=\"muted dash-feed-time\">" +
+          escapeHtml(r.created_at || "") +
+          "</span></div>" +
+          (sum ? "<p class=\"muted dash-feed-sum\">" + escapeHtml(sum) + "</p>" : "") +
+          "</div><span class=\"dash-feed-go\" aria-hidden=\"true\">→</span></a>";
+        ul.appendChild(li);
+      });
+    }
+
     async function load() {
       var btn = document.getElementById("btn-reload");
       var prevText = btn ? btn.textContent : "";
@@ -102,6 +269,7 @@
         }).length;
         document.getElementById("s-online").textContent = online;
         document.getElementById("s-offline").textContent = Math.max((dash.device_count || 0) - online, 0);
+        renderDashHealth(online, dash.device_count || 0);
         tbody.innerHTML = "";
         if (!dash.devices || !dash.devices.length) {
           document.getElementById("dev-hint").textContent =
@@ -130,12 +298,29 @@
         document.getElementById("u-nickname").textContent = u.nickname || "—";
         document.getElementById("u-email").textContent = u.email || "—";
         document.getElementById("u-phone").textContent = u.phone || "—";
+        var reportList = [];
+        try {
+          reportList = await apiFetch("/api/ai/reports");
+          renderDashReports(reportList);
+        } catch (e2) {
+          renderDashReports([]);
+        }
+        renderInsight(
+          dash.today_data_count,
+          online,
+          dash.device_count || 0,
+          Array.isArray(reportList) ? reportList.length : 0
+        );
+        syncTimestamp();
       } catch (e) {
         if (e.code === 401) {
           window.location.href = "/pages/login.html";
           return;
         }
         document.getElementById("u-username").textContent = "加载失败";
+        renderDashHealth(0, 0);
+        renderInsight(null, 0, 0, null);
+        renderDashReports([]);
         showToast(e.message || "概览加载失败", "err");
       } finally {
         if (btn) {

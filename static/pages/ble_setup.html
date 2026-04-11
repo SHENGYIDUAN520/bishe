@@ -32,7 +32,7 @@
         <li>设备将写入 NVS 并尝试连接 WiFi → 调用 <strong><code>POST /api/device/register</code></strong> 注册/校验；本页会显示设备通过 BLE 通知回传的进度。</li>
         <li>回到「设备管理」绑定或核对设备是否出现在列表中。</li>
       </ol>
-      <p class="tip">提示：Web Bluetooth 仅在<strong>安全上下文</strong>可用（HTTPS 或 localhost）。</p>
+      <p class="tip">提示：Web Bluetooth 仅在<strong>安全上下文</strong>可用。本机请用 <code>http://127.0.0.1:5000</code> 或 <code>localhost</code> 打开本页；用局域网 IP 打开时浏览器会禁用蓝牙。下发 JSON 里的服务器地址仍填电脑局域网 IP，供设备连 WiFi 后访问。</p>
     </section>
 
     <section class="card wide">
@@ -42,7 +42,13 @@
       <label>WiFi 密码</label>
       <input type="password" id="pwd" placeholder="配网密码" />
       <label>服务器地址（可选）</label>
-      <input type="text" id="server" placeholder="例如 http://192.168.188.19:5000（不填则使用固件内默认）" />
+      <input type="text" id="server" list="server-history" autocomplete="off" placeholder="填电脑局域网 IP，如 http://192.168.1.5:5000（勿填 127.0.0.1）" />
+      <datalist id="server-history"></datalist>
+      <div class="btn-row ble-server-actions">
+        <button type="button" class="btn inline btn-secondary" id="btn-server-origin">自动填入服务器地址</button>
+        <button type="button" class="btn inline btn-secondary" id="btn-server-clear">清空</button>
+      </div>
+      <p class="muted ble-server-hint">说明：浏览器用 <code>127.0.0.1</code> 打开本页才能扫蓝牙，但设备上的 <code>127.0.0.1</code> 指设备自己，无法访问你的电脑。此处须填 <strong>电脑在局域网中的 Flask 地址</strong>（与串口/固件里配置的 IP 一致）。从本机回环打开时，点上方按钮会向后端询问本机局域网 IP 并填入；历史记录下拉可复用曾填过的局域网 URL。</p>
       <label>设备密钥（可选）</label>
       <input type="text" id="secret" placeholder="不填则使用固件内默认（需与后端一致）" />
       <div class="btn-row">
@@ -61,6 +67,7 @@
   </main>
   <script src="/static/js/nav.js"></script>
   <script src="/static/js/toast.js"></script>
+  <script src="/static/js/api.js"></script>
   <script>
     // UUID 需与固件完全一致（见 firmware/esp32_ble_provisioning_gateway）
     const SERVICE_UUID = "9b5c0001-3f38-4f4a-9c2f-2b6c2e4b5c01";
@@ -71,6 +78,120 @@
     let g_server = null;
     let g_configChar = null;
     let g_statusChar = null;
+
+    var SERVER_HISTORY_KEY = "ble_server_base_history";
+    var SERVER_LAST_KEY = "ble_server_base_last";
+    var SERVER_HISTORY_MAX = 10;
+
+    function loadServerHistoryList() {
+      try {
+        var raw = localStorage.getItem(SERVER_HISTORY_KEY);
+        var arr = raw ? JSON.parse(raw) : [];
+        return Array.isArray(arr) ? arr : [];
+      } catch (_) {
+        return [];
+      }
+    }
+
+    /** 设备访问的 Base URL 不能是回环：设备上的 127.0.0.1 不是开发机 */
+    function isLoopbackServerUrl(url) {
+      try {
+        var u = new URL(String(url).trim());
+        var h = (u.hostname || "").toLowerCase();
+        return h === "localhost" || h === "127.0.0.1" || h === "::1";
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function isLoopbackPage() {
+      var h = (location.hostname || "").toLowerCase();
+      return h === "localhost" || h === "127.0.0.1" || h === "::1";
+    }
+
+    function saveServerUrl(url) {
+      var u = String(url || "").trim();
+      if (!u) return;
+      if (isLoopbackServerUrl(u)) return;
+      try {
+        var list = loadServerHistoryList().filter(function (x) {
+          return x !== u;
+        });
+        list.unshift(u);
+        if (list.length > SERVER_HISTORY_MAX) list = list.slice(0, SERVER_HISTORY_MAX);
+        localStorage.setItem(SERVER_HISTORY_KEY, JSON.stringify(list));
+        localStorage.setItem(SERVER_LAST_KEY, u);
+      } catch (_) {}
+      refreshServerDatalist();
+    }
+
+    function refreshServerDatalist() {
+      var dl = document.getElementById("server-history");
+      if (!dl) return;
+      dl.innerHTML = "";
+      loadServerHistoryList().forEach(function (u) {
+        if (isLoopbackServerUrl(u)) return;
+        var o = document.createElement("option");
+        o.value = u;
+        dl.appendChild(o);
+      });
+    }
+
+    function initServerField() {
+      var inp = document.getElementById("server");
+      if (!inp) return;
+      var last = null;
+      try {
+        last = localStorage.getItem(SERVER_LAST_KEY);
+      } catch (_) {}
+      if (last) {
+        if (isLoopbackServerUrl(last)) {
+          try {
+            localStorage.removeItem(SERVER_LAST_KEY);
+          } catch (_) {}
+        } else {
+          inp.value = last;
+        }
+      }
+      if (!inp.value && (location.protocol === "http:" || location.protocol === "https:")) {
+        if (!isLoopbackPage()) {
+          inp.value = location.origin;
+        }
+      }
+      refreshServerDatalist();
+    }
+
+    async function fillServerOrigin() {
+      var inp = document.getElementById("server");
+      if (!inp) return;
+      if (!(location.protocol === "http:" || location.protocol === "https:")) {
+        showToast("当前非 http(s) 页面，请手动输入", "info");
+        return;
+      }
+      if (!isLoopbackPage()) {
+        inp.value = location.origin;
+        showToast("已填入 " + location.origin, "info");
+        return;
+      }
+      try {
+        var d = await apiFetch("/api/server/lan-hint");
+        var base = d && d.base ? String(d.base).trim() : "";
+        var ip = d && d.ip ? String(d.ip).trim() : "";
+        if (!base || ip === "127.0.0.1" || isLoopbackServerUrl(base)) {
+          showToast("未能检测到可用的局域网 IP，请手动填写，例如 http://192.168.1.5:5000", "err");
+          inp.focus();
+          return;
+        }
+        inp.value = base;
+        showToast("已填入 " + base + "（供设备访问，非本页浏览器地址）", "info");
+      } catch (e) {
+        showToast(
+          (e && e.message ? e.message : "获取局域网地址失败") + "，请手动填写电脑局域网 IP",
+          "err"
+        );
+        inp.focus();
+      }
+    }
 
     function setLog(msg) {
       document.getElementById("log").textContent = msg;
@@ -162,6 +283,11 @@
       const server = document.getElementById("server").value.trim();
       const secret = document.getElementById("secret").value.trim();
       if (!ssid) throw new Error("请先填写 SSID。");
+      if (server && isLoopbackServerUrl(server)) {
+        throw new Error(
+          "服务器地址不能为 127.0.0.1 或 localhost：在设备上回环指设备自己，无法访问你的电脑。请改为电脑局域网 IP，例如 http://192.168.188.19:5000"
+        );
+      }
 
       const payload = {
         ssid,
@@ -174,6 +300,7 @@
       appendLog(`[${now()}] 下发 JSON：${json}`);
       await g_configChar.writeValue(new TextEncoder().encode(json));
       appendLog(`[${now()}] 已写入特征值，等待设备处理...`);
+      if (server) saveServerUrl(server);
     }
 
     async function disconnectBle() {
@@ -218,6 +345,20 @@
         showToast("断开失败", "err");
       }
     });
+
+    document.getElementById("btn-server-origin").addEventListener("click", function () {
+      fillServerOrigin();
+    });
+    (function syncServerFillButtonLabel() {
+      var btn = document.getElementById("btn-server-origin");
+      if (btn && isLoopbackPage()) btn.textContent = "自动填入局域网地址";
+    })();
+    document.getElementById("btn-server-clear").addEventListener("click", function () {
+      var inp = document.getElementById("server");
+      if (inp) inp.value = "";
+    });
+
+    initServerField();
 
     // 首屏提示
     if (!navigator.bluetooth) {

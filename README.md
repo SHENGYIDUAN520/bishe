@@ -37,6 +37,12 @@
 
 **若登录提示需要 `cryptography` 包**：MySQL 8 默认 `caching_sha2_password` 认证，已写入 `requirements.txt`；执行 `pip install -r requirements.txt` 即可。
 
+### 蓝牙配网（Web Bluetooth）
+
+- 配网页：`http://127.0.0.1:5000/pages/ble_setup.html`（或登录后从导航「蓝牙配网」进入）。**请用 `127.0.0.1` 或 `localhost` 打开本页**：局域网纯 HTTP（如 `http://192.168.x.x:5000`）下，Chrome/Edge 通常不提供 Web Bluetooth。
+- 下发给设备的 **`server_base` 须为电脑（或服务器）在局域网/公网可达的 Base URL**（常见为 `http://192.168.x.x:5000`），**勿填 `127.0.0.1` / `localhost`**（在 ESP32 上回环指设备自身，无法访问你的 PC）。
+- 从本机回环打开时，点击 **「自动填入局域网地址」** 会调用 **`GET /api/server/lan-hint`**（无需登录）填入建议地址；失败时请对照本机网卡手动填写。协议与 UUID 见 [开发文档.md](开发文档.md) §7.3。
+
 ### 环境变量残留避坑（重要）
 
 - 现象：你改了 `.env`（例如 `SMTP_SENDER`），服务仍读取旧值（如历史残留 `监控系统`），导致邮件报错。
@@ -57,7 +63,7 @@
 
 - 设备网关 `api/device/*` 已实现注册、心跳、数据上传、拉取指令、回执。
 - 新增固件示例：`firmware/esp32_dht11_gateway/esp32_dht11_gateway.ino`（DHT11 接 GPIO27）。
-- 新增 BLE 配网固件：`firmware/esp32_ble_provisioning_gateway/esp32_ble_provisioning_gateway.ino`，配合网页 `static/pages/ble_setup.html`（Windows 桌面 Chrome/Edge + HTTPS/localhost）。
+- 新增 BLE 配网固件：`firmware/esp32_ble_provisioning_gateway/esp32_ble_provisioning_gateway.ino`，配合 `static/pages/ble_setup.html`；浏览器与 `server_base` 约定见上文 **「蓝牙配网（Web Bluetooth）」** 与 `开发文档.md` §7.3。
 - 真机联调已验证通过：ESP32 + DHT11 可持续上报并在监测页展示曲线。
 - 经验提示：DHT11 不建议接 GPIO12（会影响启动/下载稳定），统一推荐 GPIO27。
 - 监测告警链路已验证：个人中心配置邮箱/电话，设备管理按设备设置温度阈值；超温触发监测页弹窗与邮件发送，并在监测页显示最近一次邮件告警状态。

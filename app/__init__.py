@@ -30,6 +30,7 @@ def create_app():
     from app.routes.ai_routes import ai_bp
     from app.routes.device_gateway_routes import device_gateway_bp
     from app.routes.dashboard_routes import dashboard_bp
+    from app.routes.server_routes import server_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(user_bp, url_prefix="/api/user")
@@ -39,6 +40,7 @@ def create_app():
     app.register_blueprint(command_bp, url_prefix="/api")
     app.register_blueprint(ai_bp, url_prefix="/api/ai")
     app.register_blueprint(device_gateway_bp, url_prefix="/api/device")
+    app.register_blueprint(server_bp, url_prefix="/api/server")
 
     @app.route("/")
     def index_page():

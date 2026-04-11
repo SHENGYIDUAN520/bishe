@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>数据监测 — 物联网设备管理平台</title>
   <link rel="stylesheet" href="/static/css/common.css" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <link rel="preload" href="/static/js/vendor/chart.umd.min.js" as="script" />
 </head>
 <body data-page="monitor">
   <header class="topbar">
@@ -89,6 +89,7 @@
   <script src="/static/js/api.js"></script>
   <script src="/static/js/nav.js"></script>
   <script src="/static/js/toast.js"></script>
+  <script src="/static/js/vendor/chart.umd.min.js"></script>
   <script>
     var chart;
     var gTempWarnHighByDevice = {};
@@ -117,8 +118,10 @@
       loadData();
     }
 
-    async function loadDevices() {
+    /** 一次请求同时填充下拉框与设备级温度阈值映射 */
+    async function loadDevicesAndThresholds() {
       var sel = document.getElementById("sel-dev");
+      gTempWarnHighByDevice = {};
       try {
         var list = await apiFetch("/api/devices");
         sel.innerHTML = "";
@@ -127,6 +130,8 @@
           return;
         }
         list.forEach(function (d) {
+          gTempWarnHighByDevice[String(d.id)] =
+            d.temp_warn_high != null ? parseFloat(d.temp_warn_high) : null;
           var o = document.createElement("option");
           o.value = d.id;
           o.textContent = (d.name || d.device_uid) + " (#" + d.id + ")";
@@ -134,20 +139,10 @@
         });
       } catch (e) {
         if (e.code === 401) window.location.href = "/pages/login.html";
-        else sel.innerHTML = "<option value=''>加载失败</option>";
-      }
-    }
-
-    async function loadWarnThresholdMap() {
-      try {
-        var list = await apiFetch("/api/devices");
-        gTempWarnHighByDevice = {};
-        (list || []).forEach(function (d) {
-          gTempWarnHighByDevice[String(d.id)] =
-            d.temp_warn_high != null ? parseFloat(d.temp_warn_high) : null;
-        });
-      } catch (_) {
-        gTempWarnHighByDevice = {};
+        else {
+          sel.innerHTML = "<option value=''>加载失败</option>";
+          gTempWarnHighByDevice = {};
+        }
       }
     }
 
@@ -328,11 +323,9 @@
         applyQuickRange(days);
       });
     });
-    loadDevices().then(function () {
-      loadWarnThresholdMap().then(function () {
-        var sel = document.getElementById("sel-dev");
-        if (sel.options.length && sel.options[0].value) loadData();
-      });
+    loadDevicesAndThresholds().then(function () {
+      var sel = document.getElementById("sel-dev");
+      if (sel.options.length && sel.options[0].value) loadData();
     });
   </script>
 </body>

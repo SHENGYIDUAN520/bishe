@@ -201,17 +201,42 @@
       syncDetailNavButtons();
     }
 
+    function stripReportQueryFromUrl() {
+      try {
+        var u = new URL(window.location.href);
+        if (!u.searchParams.has("report") && !u.searchParams.has("id")) return;
+        u.searchParams.delete("report");
+        u.searchParams.delete("id");
+        var next = u.pathname + (u.searchParams.toString() ? "?" + u.searchParams.toString() : "") + u.hash;
+        window.history.replaceState({}, "", next);
+      } catch (_) {}
+    }
+
     function closeDetailModal() {
       var m = document.getElementById("report-modal");
       if (!m.classList.contains("show")) return;
       m.classList.remove("show");
       m.setAttribute("aria-hidden", "true");
+      stripReportQueryFromUrl();
       window.setTimeout(function () {
         document.body.classList.remove("modal-open");
         document.getElementById("detail-meta").textContent = "—";
         document.getElementById("detail-body").textContent = "—";
         document.getElementById("detail-body").className = "report-detail muted";
       }, 220);
+    }
+
+    /** 从首页等入口 ?report= 或 ?id= 进入时，列表加载完后自动打开详情 */
+    function openReportFromUrl() {
+      try {
+        var p = new URLSearchParams(window.location.search);
+        var raw = p.get("report") || p.get("id");
+        if (raw == null || String(raw).trim() === "") return;
+        if (!/^\d+$/.test(String(raw).trim())) return;
+        var id = parseInt(String(raw).trim(), 10);
+        if (!id || Number.isNaN(id)) return;
+        loadDetail(id);
+      } catch (_) {}
     }
 
     function syncDetailNavButtons() {
@@ -278,7 +303,9 @@
     toggleEnvCustom();
 
     loadDevices();
-    refreshList();
+    refreshList().then(function () {
+      openReportFromUrl();
+    });
   </script>
 </body>
 </html>
