@@ -26,7 +26,9 @@
      source .venv/bin/activate
      pip install -r requirements.txt
      ```
-2. 复制 `.env.example` 为 `.env`，填写 MySQL 账号与 `SECRET_KEY`。若使用火山方舟：同时填写 **`AI_API_KEY`** 与 **`AI_MODEL`**（控制台推理接入点 ID，形如 `doubao-seed-2-0-pro-xxxxxx`），并执行 `pip install -r requirements.txt` 安装 `requests`。
+2. 复制 `.env.example` 为 `.env`，填写 MySQL 账号与 `SECRET_KEY`。若使用火山方舟：同时填写 **`AI_API_KEY`** 与 **`AI_MODEL`**（控制台推理接入点 ID，形如 `doubao-seed-2-0-pro-xxxxxx`），并执行 `pip install -r requirements.txt` 安装 `requests`。云服务器建议补充：
+   - `AI_HTTP_TIMEOUT=30~90`
+   - `AI_MAX_RETRIES=1`
 3. 在 MySQL 中执行 `sql/init.sql`（若报 `user` 表相关错误，请使用仓库内最新脚本：表名已加反引号，默认密码哈希为 pbkdf2）。脚本内含**演示设备与传感数据**，便于无 ESP32 时浏览监测与报告页。
 4. 启动：
    ```bash
@@ -42,6 +44,7 @@
 - 配网页：`http://127.0.0.1:5000/pages/ble_setup.html`（或登录后从导航「蓝牙配网」进入）。**请用 `127.0.0.1` 或 `localhost` 打开本页**：局域网纯 HTTP（如 `http://192.168.x.x:5000`）下，Chrome/Edge 通常不提供 Web Bluetooth。
 - 下发给设备的 **`server_base` 须为电脑（或服务器）在局域网/公网可达的 Base URL**（常见为 `http://192.168.x.x:5000`），**勿填 `127.0.0.1` / `localhost`**（在 ESP32 上回环指设备自身，无法访问你的 PC）。
 - 从本机回环打开时，点击 **「自动填入局域网地址」** 会调用 **`GET /api/server/lan-hint`**（无需登录）填入建议地址；失败时请对照本机网卡手动填写。协议与 UUID 见 [开发文档.md](开发文档.md) §7.3。
+- 下一步生产化方案：改为 **域名 + HTTPS** 统一访问入口（已纳入计划），降低浏览器安全上下文限制导致的环境差异。
 
 ### 环境变量残留避坑（重要）
 
@@ -68,4 +71,5 @@
 - 经验提示：DHT11 不建议接 GPIO12（会影响启动/下载稳定），统一推荐 GPIO27。
 - 监测告警链路已验证：个人中心配置邮箱/电话，设备管理按设备设置温度阈值；超温触发监测页弹窗与邮件发送，并在监测页显示最近一次邮件告警状态。
 - AI 报告支持场景化分析：机房、普通家庭、工厂、自定义；支持报告删除。
+- 云上若出现 `/api/ai/analyze` 超时：优先检查 `AI_HTTP_TIMEOUT`、`AI_MAX_RETRIES` 与 gunicorn `-t` 参数是否匹配。
 - 前端支持主题切换（默认/卡片/哔哩）与全局动效；监测页支持 24h/3d/7d/30d 快速筛选，AI 报告详情支持弹窗连续浏览。
