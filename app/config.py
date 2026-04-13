@@ -24,6 +24,9 @@ class Config:
     ARK_BASE_URL = (
         os.environ.get("ARK_BASE_URL") or "https://ark.cn-beijing.volces.com/api/v3"
     ).strip()
+    # 避免外部 AI 接口慢响应导致 gunicorn worker 超时
+    AI_HTTP_TIMEOUT = int(os.environ.get("AI_HTTP_TIMEOUT", "12"))
+    AI_MAX_RETRIES = int(os.environ.get("AI_MAX_RETRIES", "2"))
 
     # 温度告警邮件（SMTP）
     SMTP_HOST = (os.environ.get("SMTP_HOST") or "").strip()

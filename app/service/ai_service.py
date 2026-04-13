@@ -158,6 +158,8 @@ def run_local_demo_analysis(
     api_key = (cfg.get("AI_API_KEY") or "").strip()
     model = (cfg.get("AI_MODEL") or "").strip()
     base_url = (cfg.get("ARK_BASE_URL") or "").strip()
+    ai_timeout = int(cfg.get("AI_HTTP_TIMEOUT") or 12)
+    ai_retries = int(cfg.get("AI_MAX_RETRIES") or 2)
 
     if api_key and model:
         if environment_type == "machine_room":
@@ -181,7 +183,12 @@ def run_local_demo_analysis(
             {"role": "user", "content": user_prompt},
         ]
         ark_ok, ark_text = ark_ai_client.chat_completion(
-            base_url, api_key, model, messages
+            base_url,
+            api_key,
+            model,
+            messages,
+            timeout=ai_timeout,
+            max_retries=ai_retries,
         )
         if ark_ok:
             title = "智能分析报告（火山方舟）"
@@ -238,6 +245,8 @@ def generate_temp_alert_advice(temp: float, humidity: Optional[float], threshold
     api_key = (cfg.get("AI_API_KEY") or "").strip()
     model = (cfg.get("AI_MODEL") or "").strip()
     base_url = (cfg.get("ARK_BASE_URL") or "").strip()
+    ai_timeout = int(cfg.get("AI_HTTP_TIMEOUT") or 12)
+    ai_retries = int(cfg.get("AI_MAX_RETRIES") or 2)
     if not api_key or not model:
         return local
 
@@ -255,5 +264,12 @@ def generate_temp_alert_advice(temp: float, humidity: Optional[float], threshold
             ),
         },
     ]
-    ok, text = ark_ai_client.chat_completion(base_url, api_key, model, messages)
+    ok, text = ark_ai_client.chat_completion(
+        base_url,
+        api_key,
+        model,
+        messages,
+        timeout=ai_timeout,
+        max_retries=ai_retries,
+    )
     return text.strip() if ok and text.strip() else local
